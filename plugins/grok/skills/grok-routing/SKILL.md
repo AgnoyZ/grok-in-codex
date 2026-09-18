@@ -8,11 +8,12 @@ user-invocable: false
 
 ## Prefer Grok MCP tools
 
+- **Host-led dual-model implementation** (Codex plans/decides/accepts, Grok implements) → `grok_implement`. Follow `grok-orchestrated-coding`. Do **not** use `grok_plan` / `grok_design` for that host-owned planning phase.
 - Substantial debugging after Codex is stuck
 - Second-opinion implementation of a non-trivial change
 - Best-of-N alternative approaches (`bestOfN`)
 - Risky edits that should land in a worktree (`worktree`)
-- **Ambiguous architecture** → `grok_plan` then implement, or `grok_design`
+- **Ambiguous architecture, Grok-owned planning** → `grok_plan` then implement, or `grok_design`
 - **Multi-PR delivery from a design doc** → `grok_execute_plan`
 - **Named multi-agent recipes** → `grok_workflow`
 - **PR CI/review babysitting** → `grok_babysit`
@@ -31,9 +32,10 @@ user-invocable: false
 
 | User intent | Prefer |
 | --- | --- |
+| Codex plans, Grok implements, Codex verifies | `grok_implement` (host-led; not `grok_plan` / `grok_design`) |
 | Stuck on a bug / implement a fix | `grok_rescue` (+ worktree + check) |
-| Unclear approach before coding | `grok_plan` |
-| Architecture / design doc + PR plan | `grok_design` |
+| Unclear approach; Grok should plan | `grok_plan` |
+| Architecture / design doc + PR plan (Grok-owned) | `grok_design` |
 | Ship a design doc’s PR DAG | `grok_execute_plan` (or `latest=true` after design) |
 | Multi-dimension structured fan-out | `grok_workflow` |
 | Ship quality on a branch/PR | `grok_review` (+ `postPending` for GH) |
@@ -43,9 +45,19 @@ user-invocable: false
 | Brand stills / clips | `grok_image` / `grok_video` |
 | Find past Grok work | `grok_sessions` |
 
+## Host-led vs Grok-owned planning
+
+When the user **explicitly** asks for Codex to plan and Grok to implement (including dual-model implementation briefs):
+
+1. Codex reads the repo, captures baseline status, and writes the brief. **Do not** call `grok_plan` or `grok_design` for this phase.
+2. Call **`grok_implement`**. Do not edit the same workspace while Grok runs.
+3. Codex independently inspects git status/diff and re-runs checks. Never treat Grok output as final acceptance.
+
+Use **`grok_plan` / `grok_design`** only when the user wants **Grok** to explore and propose the plan.
+
 ## Depth pipeline (multi-PR / ambiguous product work)
 
-Prefer this sequence over a single giant rescue:
+Prefer this sequence over a single giant rescue when **Grok** owns planning:
 
 1. **`grok_plan`** — explore + plan.md when the approach is unclear (artifacts under `.grok-plans/`).
 2. **`grok_design`** — consensus design doc + PR Plan → artifacts under `.grok-designs/`.
@@ -67,6 +79,7 @@ When workstreams are independent, **run multiple Grok jobs at once**:
 | Need | Tool |
 | --- | --- |
 | Fix / investigate | `grok_rescue` |
+| Host-led implement | `grok_implement` |
 | Plan | `grok_plan` |
 | Design | `grok_design` |
 | Execute plan | `grok_execute_plan` |
@@ -91,6 +104,7 @@ Do **not** serialize independent Grok work just because another job is running.
 | --- | --- |
 | Setup | `grok_setup` |
 | Fix / investigate | `grok_rescue` |
+| Host-led implement | `grok_implement` |
 | Plan mode | `grok_plan` |
 | Design doc | `grok_design` |
 | Execute PR plan | `grok_execute_plan` |

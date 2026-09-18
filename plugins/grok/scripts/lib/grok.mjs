@@ -172,8 +172,8 @@ export function buildGrokArgs(options = {}) {
   if (options.bestOfN && Number(options.bestOfN) > 1) {
     args.push("--best-of-n", String(options.bestOfN));
   }
-  // Grok CLI 1.x removed --check. The companion retains this option as
-  // orchestration metadata and asks for verification in the task prompt.
+  // Grok CLI 1.x removed --check. The companion keeps this option and injects
+  // a verification contract into the task prompt before the prompt file is written.
   if (options.worktree) {
     if (typeof options.worktree === "string" && options.worktree !== "true") {
       args.push("--worktree", options.worktree);

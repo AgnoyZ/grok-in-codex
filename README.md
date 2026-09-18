@@ -2,7 +2,7 @@
 
 Use [Grok](https://grok.com) from inside Codex for code reviews, delegated coding, planning, multi-agent workflows, design→execute pipelines, PR babysitting, and image/video/document generation.
 
-**Plugin version:** 0.5.9. Codex stays the orchestrator. A thin MCP server + companion script hands real work to Grok on your machine via the local CLI (Grok Build ≥ **0.2.118** recommended).
+**Plugin version:** 0.6.0. Codex stays the orchestrator. A thin MCP server + companion script hands real work to Grok on your machine via the local CLI (Grok Build ≥ **0.2.118** recommended).
 
 Artifact dirs (gitignored): `.grok-plans/`, `.grok-designs/`, `.grok-workflows/`, `.grok-docs/`, `.grok-reviews/`, `.grok-media/`.
 
@@ -14,6 +14,7 @@ Using Claude Code instead? Use the sibling plugin: [grok-in-claude](https://gith
 | --- | --- |
 | `grok_setup` | Check CLI + auth + version floor + doctor; toggle stop review gate |
 | `grok_rescue` | Delegate investigation / fixes (write-capable; full control flags) |
+| `grok_implement` | Host-led implement: Codex plans/verifies, Grok implements a host-approved brief |
 | `grok_plan` | Plan mode only (explore → plan.md under `.grok-plans/`) |
 | `grok_review` | Structured read-only review (tree / branch / PR; optional `postPending`) |
 | `grok_adversarial_review` | Challenge design, tradeoffs, and assumptions |
@@ -30,9 +31,9 @@ Using Claude Code instead? Use the sibling plugin: [grok-in-claude](https://gith
 | `grok_result` | Final output (plan.md preferred for plan jobs; usage + artifacts) |
 | `grok_cancel` | Cancel a background job |
 
-**Control flags** (rescue/plan/review and long-running jobs): `sandbox`, `planMode` / `permissionMode`, `agent`, `noSubagents`, `memory` / `noMemory`, `allow` / `deny`, `disableWebSearch`, `forkSession`, `maxTurns`.
+**Control flags** (rescue/implement/plan/review and long-running jobs): `sandbox`, `planMode` / `permissionMode`, `agent`, `noSubagents`, `memory` / `noMemory`, `allow` / `deny`, `disableWebSearch`, `forkSession`, `maxTurns`.
 
-Skills: brand/media recipes, routing (including plan→design→execute-plan), runtime contracts, workflows, prompting.
+Skills: brand/media recipes, routing (host-led implement vs Grok-owned plan/design), runtime contracts, workflows, prompting, orchestrated coding.
 
 ## Requirements
 
@@ -73,6 +74,7 @@ Or ask Codex to call `grok_setup`.
 
 ```text
 Ask Grok to review this branch against main.
+Have Codex plan and Grok implement the retry jitter change.
 Use Grok to plan the auth rewrite.
 Generate a design doc with Grok, then execute the latest plan dry-run.
 Start a background Grok rescue job for the retry redesign.
@@ -89,6 +91,7 @@ grok_execute_plan latest=true dryRun=true
 grok_workflow action=list
 grok_review base=main focus="auth, data loss, and race conditions"
 grok_rescue prompt="investigate why npm test is failing" background=true
+grok_implement implementationBrief="Add full jitter to src/retry.ts per the host plan" acceptanceCriteria=["Retries use full jitter","Existing retry tests pass"] verificationCommands=["npm test"]
 grok_babysit action=list
 grok_document type=pdf prompt="one-pager for the launch"
 grok_sessions action=list
@@ -111,9 +114,23 @@ grok_review cwd="/path/to/project" base=main
 grok_status cwd="/path/to/project" json=true
 ```
 
+## Host-led implementation
+
+When Codex should plan and verify while Grok implements (including dual-model implementation briefs):
+
+1. Codex reads the repo and captures baseline git/test status before any writes.
+2. Codex writes a concrete `implementationBrief` and `acceptanceCriteria`. Optional: `allowedFiles`, `forbiddenChanges`, `verificationCommands`.
+3. Call **`grok_implement`**. Do not edit the same workspace while Grok runs.
+4. Codex independently inspects `git status` / `git diff` and re-runs the appropriate checks. Never trust Grok narration as final acceptance.
+5. Corrections resume the same Grok session (`resumeSession` / `resume`).
+
+Do **not** use `grok_plan` or `grok_design` for that host-owned planning phase. Those remain for **Grok-owned** planning.
+
+`grok_implement` maps to companion `task --check`. It defaults `--model deep` only when no `model` or `effort` is supplied. `deep` is an effort preset over the Grok CLI configured model; it does not pin a model id. This tool does not certify host final acceptance.
+
 ## Depth pipeline
 
-For multi-PR or ambiguous product work, prefer:
+For multi-PR or ambiguous product work where **Grok** owns planning, prefer:
 
 1. **`grok_plan`** — explore + harvest `plan.md`
 2. **`grok_design`** — design doc + PR plan under `.grok-designs/`
@@ -152,7 +169,15 @@ Default state root when unset: `~/.grok/codex-plugin/state/`. Codex does **not**
 - Write-capable by default.
 - Use `readOnly=true` for investigation-only work.
 - Use `worktree=true` / `check=true` / `bestOfN` for safer or parallel attempts.
+- `check=true` appends a verification contract to the prompt (Grok CLI 1.x has no `--check` flag). That is implementer evidence, not host final acceptance.
 - Full control surface available (sandbox, memory, agent, allow/deny, maxTurns, …).
+
+### Host-led implement
+
+- Required: `implementationBrief`, `acceptanceCriteria`.
+- Always runs with `--check`. Optional structured fields: `allowedFiles`, `forbiddenChanges`, `verificationCommands`.
+- Default `--model deep` only when model/effort are omitted; preserve explicit overrides.
+- Resume the same session for corrections. Codex remains planner and final verifier.
 
 ### Plan / design / execute
 

@@ -1,8 +1,8 @@
 {
   "name": "grok-in-codex",
-  "version": "0.5.9",
+  "version": "0.6.0",
   "private": true,
-  "description": "Codex plugin for orchestrating Grok Build (rescue, plan, design, workflows, reviews, media, docs)",
+  "description": "Codex plugin for orchestrating Grok Build (rescue, host-led implement, plan, design, workflows, reviews, media, docs)",
   "type": "module",
   "engines": {
     "node": ">=18.18"

@@ -1,7 +1,7 @@
 {
   "name": "grok",
-  "version": "0.5.9",
-  "description": "Use Grok from Codex for reviews, rescue, plan, design, workflows, docs, and media.",
+  "version": "0.6.0",
+  "description": "Use Grok from Codex for reviews, rescue, host-led implement, plan, design, workflows, docs, and media.",
   "author": {
     "name": "stdevMac",
     "url": "https://github.com/stdevMac"
@@ -23,8 +23,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Grok",
-    "shortDescription": "Delegate reviews, rescue, plan, design, workflows, docs, and media to Grok",
-    "longDescription": "Use the Grok CLI from Codex for structured code review, plan/design/execute pipelines, Rhai workflows, PR babysitting, documents, background jobs, image/video generation, job status, result retrieval, cancellation, and context transfer.",
+    "shortDescription": "Delegate reviews, rescue, host-led implement, plan, design, workflows, docs, and media to Grok",
+    "longDescription": "Use the Grok CLI from Codex for structured code review, host-led Codex-plan/Grok-implement/Codex-verify, plan/design/execute pipelines, Rhai workflows, PR babysitting, documents, background jobs, image/video generation, job status, result retrieval, cancellation, and context transfer.",
     "developerName": "stdevMac",
     "category": "Developer Tools",
     "capabilities": [
@@ -36,6 +36,7 @@
     "defaultPrompt": [
       "Ask Grok to review this branch",
       "Use Grok to plan the auth rewrite",
+      "Have Grok implement this host-approved plan",
       "Generate a design doc with Grok",
       "Generate an image with Grok"
     ],

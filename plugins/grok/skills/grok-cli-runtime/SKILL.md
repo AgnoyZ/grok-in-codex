@@ -71,9 +71,22 @@ MCP input keys map to companion flags:
 - `default` and `grok` use the Grok CLI configured default model without forcing an effort
 - Only an explicit model id is forwarded with `--model`; never hard-code the configured model
 - `resume` → `--resume-last`; `resumeSession` → resume that id; `fresh` → no resume
-- Pass `worktree` and `bestOfN` through when present. Keep `check` as
-  companion-side verification metadata because Grok CLI 1.x removed `--check`.
+- Pass `worktree` and `bestOfN` through when present.
+- `check=true` appends a verification contract to the prompt before the
+  prompt file is written (Grok CLI 1.x has no `--check` flag). This is
+  implementer evidence, not host final acceptance.
 - Default write-capable; `readOnly` only when requested
+
+## Implement (`grok_implement`)
+
+- Exactly one `task --check` invocation per handoff
+- Compose the implementer prompt from `implementationBrief` + `acceptanceCriteria`
+  (optional `allowedFiles`, `forbiddenChanges`, `verificationCommands`)
+- Default `--model deep` only when no `model` or `effort` is supplied; `deep`
+  remains an effort preset and must not pin a model id
+- Preserve explicit `model` / `effort` overrides
+- `resume` / `resumeSession` correct the same session; `fresh` starts over
+- Host Codex remains planner and final verifier
 
 ## Plan (`grok_plan`)
 

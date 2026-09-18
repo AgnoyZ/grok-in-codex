@@ -12,6 +12,8 @@ import {
   resolveMcpCwd,
   runCompanion
 } from "../plugins/grok/mcp/server.mjs";
+import { buildImplementationPrompt } from "../plugins/grok/scripts/lib/implementation.mjs";
+import { normalizeEffort, normalizeModel } from "../plugins/grok/scripts/lib/models.mjs";
 
 const SERVER_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -26,6 +28,7 @@ const EXPECTED_TOOLS = [
   "grok_document",
   "grok_execute_plan",
   "grok_image",
+  "grok_implement",
   "grok_plan",
   "grok_rescue",
   "grok_result",
@@ -198,6 +201,178 @@ test("buildCompanionInvocation maps sessions and document tools", () => {
   assert.ok(doc.args.includes("one-pager"));
 });
 
+const IMPLEMENT_INPUT = {
+  implementationBrief: "Add full jitter to src/retry.ts. Keep fetchWithRetry public.",
+  acceptanceCriteria: ["Retries use full jitter", "Existing retry tests pass"],
+  allowedFiles: ["src/retry.ts", "tests/retry.test.ts"],
+  forbiddenChanges: ["Do not change public API signatures"],
+  verificationCommands: ["npm test"]
+};
+
+function flagValues(args, flag) {
+  const values = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === flag) {
+      values.push(args[i + 1]);
+    }
+  }
+  return values;
+}
+
+test("grok_implement schema requires a brief and criteria and accepts cwd", () => {
+  const tool = listToolDefinitions().find((entry) => entry.name === "grok_implement");
+  assert.ok(tool);
+  assert.deepEqual(tool.inputSchema.required, ["implementationBrief", "acceptanceCriteria"]);
+  assert.ok(tool.inputSchema.properties.cwd);
+  assert.ok(tool.inputSchema.properties.implementationBrief);
+  assert.ok(tool.inputSchema.properties.acceptanceCriteria);
+  assert.ok(tool.inputSchema.properties.resumeSession);
+  assert.ok(tool.inputSchema.properties.sandbox);
+  assert.equal(tool.inputSchema.properties.check, undefined);
+});
+
+test("grok_implement maps to task --check with a composed implementer prompt", () => {
+  const invocation = buildCompanionInvocation("grok_implement", IMPLEMENT_INPUT);
+  assert.equal(invocation.command, "task");
+  assert.equal(invocation.args[0], "task");
+  assert.ok(invocation.args.includes("--check"));
+  assert.deepEqual(flagValues(invocation.args, "--model"), ["deep"]);
+  assert.ok(!invocation.args.includes("--effort"));
+
+  const prompt = invocation.args.at(-1);
+  assert.equal(prompt, buildImplementationPrompt(IMPLEMENT_INPUT));
+  assert.match(prompt, /Add full jitter to src\/retry\.ts/);
+  assert.match(prompt, /Retries use full jitter/);
+  assert.match(prompt, /src\/retry\.ts/);
+  assert.match(prompt, /Do not change public API signatures/);
+  assert.match(prompt, /npm test/);
+  assert.doesNotMatch(prompt, /## Verification contract/);
+});
+
+test("grok_implement defaults to the deep effort preset without pinning a model id", () => {
+  const invocation = buildCompanionInvocation("grok_implement", {
+    implementationBrief: "Ship the host-approved retry change",
+    acceptanceCriteria: ["Existing tests pass"]
+  });
+  const models = flagValues(invocation.args, "--model");
+  assert.deepEqual(models, ["deep"]);
+  assert.equal(normalizeModel(models[0]), null);
+  assert.equal(normalizeEffort(undefined, models[0]), "high");
+  assert.ok(!invocation.args.includes("--effort"));
+});
+
+test("grok_implement preserves explicit model and effort overrides", () => {
+  const withModel = buildCompanionInvocation("grok_implement", {
+    ...IMPLEMENT_INPUT,
+    model: "custom-model"
+  });
+  assert.deepEqual(flagValues(withModel.args, "--model"), ["custom-model"]);
+  assert.equal(normalizeModel("custom-model"), "custom-model");
+  assert.ok(!withModel.args.includes("--effort"));
+
+  const withPreset = buildCompanionInvocation("grok_implement", {
+    ...IMPLEMENT_INPUT,
+    model: "fast"
+  });
+  assert.deepEqual(flagValues(withPreset.args, "--model"), ["fast"]);
+  assert.equal(normalizeModel("fast"), null);
+  assert.equal(normalizeEffort(undefined, "fast"), "low");
+
+  const withEffort = buildCompanionInvocation("grok_implement", {
+    ...IMPLEMENT_INPUT,
+    effort: "low"
+  });
+  assert.ok(!withEffort.args.includes("--model"));
+  assert.deepEqual(flagValues(withEffort.args, "--effort"), ["low"]);
+
+  const withBoth = buildCompanionInvocation("grok_implement", {
+    ...IMPLEMENT_INPUT,
+    model: "fast",
+    effort: "medium"
+  });
+  assert.deepEqual(flagValues(withBoth.args, "--model"), ["fast"]);
+  assert.deepEqual(flagValues(withBoth.args, "--effort"), ["medium"]);
+  assert.ok(!withBoth.args.includes("deep"));
+});
+
+test("grok_implement resumeSession takes precedence over resume and fresh", () => {
+  const session = buildCompanionInvocation("grok_implement", {
+    ...IMPLEMENT_INPUT,
+    resumeSession: "sess-123",
+    resume: true,
+    fresh: true
+  });
+  assert.deepEqual(flagValues(session.args, "--resume-session"), ["sess-123"]);
+  assert.ok(!session.args.includes("--resume-last"));
+  assert.ok(!session.args.includes("--fresh"));
+
+  const resumeLast = buildCompanionInvocation("grok_implement", {
+    ...IMPLEMENT_INPUT,
+    resume: true,
+    fresh: true
+  });
+  assert.ok(resumeLast.args.includes("--resume-last"));
+  assert.ok(!resumeLast.args.includes("--resume-session"));
+  assert.ok(!resumeLast.args.includes("--fresh"));
+
+  const fresh = buildCompanionInvocation("grok_implement", {
+    ...IMPLEMENT_INPUT,
+    fresh: true
+  });
+  assert.ok(fresh.args.includes("--fresh"));
+  assert.ok(!fresh.args.includes("--resume-last"));
+  assert.ok(!fresh.args.includes("--resume-session"));
+});
+
+test("grok_implement forwards control flags, worktree, background, and json", () => {
+  const invocation = buildCompanionInvocation("grok_implement", {
+    ...IMPLEMENT_INPUT,
+    background: true,
+    json: true,
+    worktreeName: "impl-1",
+    worktreeRef: "main",
+    sandbox: "workspace",
+    noSubagents: true,
+    memory: true,
+    maxTurns: 20
+  });
+
+  assert.ok(invocation.args.includes("--background"));
+  assert.ok(invocation.args.includes("--json"));
+  assert.ok(invocation.args.includes("--check"));
+  assert.deepEqual(flagValues(invocation.args, "--worktree-name"), ["impl-1"]);
+  assert.deepEqual(flagValues(invocation.args, "--worktree-ref"), ["main"]);
+  assert.ok(!invocation.args.includes("--worktree"));
+  assert.deepEqual(flagValues(invocation.args, "--sandbox"), ["workspace"]);
+  assert.ok(invocation.args.includes("--no-subagents"));
+  assert.ok(invocation.args.includes("--memory"));
+  assert.deepEqual(flagValues(invocation.args, "--max-turns"), ["20"]);
+});
+
+test("grok_implement requires a brief and at least one acceptance criterion", () => {
+  assert.throws(() => buildCompanionInvocation("grok_implement", {}), /implementationBrief/);
+  assert.throws(
+    () => buildCompanionInvocation("grok_implement", { implementationBrief: "x" }),
+    /acceptanceCriteria/
+  );
+  assert.throws(
+    () =>
+      buildCompanionInvocation("grok_implement", {
+        implementationBrief: "x",
+        acceptanceCriteria: []
+      }),
+    /acceptanceCriteria/
+  );
+  assert.throws(
+    () =>
+      buildCompanionInvocation("grok_implement", {
+        implementationBrief: "   ",
+        acceptanceCriteria: ["done"]
+      }),
+    /implementationBrief/
+  );
+});
+
 /**
  * Codex speaks newline-delimited JSON over stdio for plugin MCP servers.
  * Content-Length framing must not be required or emitted.
@@ -265,9 +440,10 @@ test("stdio MCP transport speaks NDJSON (Codex framing)", async () => {
     if (init && tools && status) {
       child.kill();
       assert.equal(init.result?.serverInfo?.name, "grok-in-codex");
-      assert.equal(init.result?.serverInfo?.version, "0.5.9");
+      assert.equal(init.result?.serverInfo?.version, "0.6.0");
       assert.ok(Array.isArray(tools.result?.tools));
       assert.equal(tools.result.tools.length, EXPECTED_TOOLS.length);
+      assert.ok(tools.result.tools.some((t) => t.name === "grok_implement"));
       assert.ok(tools.result.tools.some((t) => t.name === "grok_plan"));
       assert.ok(tools.result.tools.some((t) => t.name === "grok_workflow"));
       assert.equal(status.result?.isError, false);

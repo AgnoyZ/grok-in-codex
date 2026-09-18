@@ -29,6 +29,7 @@ import {
 } from "./lib/control.mjs";
 import { buildDesignPrompt, buildExecutePlanPrompt, buildPlanModePrompt } from "./lib/design.mjs";
 import { buildDocumentPrompt, normalizeDocumentType } from "./lib/documents.mjs";
+import { applyVerificationContract } from "./lib/implementation.mjs";
 import { collectStopGateContext, resolveReviewTarget } from "./lib/git.mjs";
 import {
   getGrokAuthStatus,
@@ -707,8 +708,8 @@ async function commandTask(argv) {
   });
 
   const cwd = resolveWorkspaceRoot(options.cwd || process.cwd());
-  const prompt = positionals.join(" ").trim();
-  if (!prompt) {
+  const rawPrompt = positionals.join(" ").trim();
+  if (!rawPrompt) {
     throw new Error("Missing task prompt. Example: task fix the failing tests");
   }
 
@@ -723,6 +724,7 @@ async function commandTask(argv) {
     options["worktree-name"] ||
     (options.worktree ? true : false);
   const check = Boolean(options.check);
+  const prompt = applyVerificationContract(rawPrompt, { check });
 
   let resume = null;
   if (options.fresh) {
@@ -748,7 +750,7 @@ async function commandTask(argv) {
 
   const job = createJobShell(cwd, {
     kind: "task",
-    title: titleFromPrompt(prompt),
+    title: titleFromPrompt(rawPrompt),
     prompt,
     write: writeMode,
     model,

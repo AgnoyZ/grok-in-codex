@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+### Added
+- **Host-led implementation (`grok_implement`)**: Codex plans and verifies; Grok implements a host-approved brief via companion `task --check`. Defaults to the `deep` effort preset when no model or effort is supplied (`deep` does not pin a model id). Same-session corrections via `resumeSession` / `resume`.
+- **`grok-orchestrated-coding` skill**: host-led dual-model workflow (baseline, brief, implement, independent host verify). Distinct from Grok-owned `grok_plan` / `grok_design`.
+
+### Improved
+- **`check=true` on `grok_rescue`**: appends a verification contract to the prompt before the prompt file is written. Grok CLI 1.x still has no `--check` flag. Implementer checks are not host final acceptance.
+
 ## 0.5.9
 
 ### Fixed

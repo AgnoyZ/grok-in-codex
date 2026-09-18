@@ -15,8 +15,8 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Developer Tools",
-      "version": "0.5.9"
+      "version": "0.6.0"
     }
   ],
-  "version": "0.5.9"
+  "version": "0.6.0"
 }

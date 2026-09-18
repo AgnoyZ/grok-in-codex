@@ -6,7 +6,9 @@ import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
-const SERVER_VERSION = "0.5.9";
+import { buildImplementationPrompt } from "../scripts/lib/implementation.mjs";
+
+const SERVER_VERSION = "0.6.0";
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const COMPANION = path.join(ROOT_DIR, "scripts", "grok-companion.mjs");
 
@@ -84,9 +86,53 @@ const TOOL_DEFINITIONS = [
         worktree: booleanSchema("Run edits in a Grok-managed git worktree."),
         worktreeName: stringSchema("Name for a Grok-managed git worktree."),
         worktreeRef: stringSchema("Base ref for the Grok worktree."),
-        check: booleanSchema("Ask Grok to verify its own work before returning."),
+        check: booleanSchema(
+          "Require Grok to run relevant tests/static checks and report exact command outcomes. Does not replace host verification."
+        ),
         bestOfN: integerSchema("Run N parallel attempts of the same task and keep the best."),
         verbatim: booleanSchema("Avoid adding extra wrapper instructions to the prompt."),
+        ...COMMON_JOB_PROPERTIES
+      }
+    }
+  },
+  {
+    name: "grok_implement",
+    description:
+      "Host-led implementation: Codex owns the plan and final acceptance; Grok implements a host-approved brief. This tool does not certify host acceptance. Always runs with implementer verification (--check). Defaults to the deep effort preset when no model or effort is supplied.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["implementationBrief", "acceptanceCriteria"],
+      properties: {
+        implementationBrief: stringSchema(
+          "Host-approved implementation brief. Codex owns the plan; Grok implements it without expanding scope."
+        ),
+        acceptanceCriteria: {
+          type: "array",
+          items: { type: "string" },
+          description: "Measurable acceptance criteria the implementer must satisfy."
+        },
+        allowedFiles: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional file paths Grok may change."
+        },
+        forbiddenChanges: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional changes Grok must not make."
+        },
+        verificationCommands: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional commands Grok should run as implementer checks (not host final acceptance)."
+        },
+        resume: booleanSchema("Resume the latest Grok task session for this repository."),
+        resumeSession: stringSchema("Resume a specific Grok session id."),
+        fresh: booleanSchema("Start a fresh Grok session."),
+        worktree: booleanSchema("Run edits in a Grok-managed git worktree."),
+        worktreeName: stringSchema("Name for a Grok-managed git worktree."),
+        worktreeRef: stringSchema("Base ref for the Grok worktree."),
         ...COMMON_JOB_PROPERTIES
       }
     }
@@ -417,6 +463,32 @@ function appendReviewArgs(args, input) {
   }
 }
 
+function resolveImplementModel(input) {
+  if (hasValue(input.model) || hasValue(input.effort)) {
+    return input.model;
+  }
+  return "deep";
+}
+
+function appendTaskResumeArgs(args, input) {
+  if (input.resumeSession) {
+    pushValue(args, input.resumeSession, "--resume-session");
+  } else if (input.resume) {
+    args.push("--resume-last");
+  } else if (input.fresh) {
+    args.push("--fresh");
+  }
+}
+
+function appendTaskWorktreeArgs(args, input) {
+  if (input.worktreeName) {
+    pushValue(args, input.worktreeName, "--worktree-name");
+  } else {
+    pushFlag(args, input.worktree, "--worktree");
+  }
+  pushValue(args, input.worktreeRef, "--worktree-ref");
+}
+
 function appendMediaArgs(args, input, kind) {
   pushFlag(args, input.background, "--background");
   pushValue(args, input.model, "--model");
@@ -463,21 +535,10 @@ export function buildCompanionInvocation(toolName, input = {}) {
       args.push(command);
       pushFlag(args, input.background, "--background");
       pushFlag(args, input.readOnly, "--read-only");
-      if (input.resumeSession) {
-        pushValue(args, input.resumeSession, "--resume-session");
-      } else if (input.resume) {
-        args.push("--resume-last");
-      } else if (input.fresh) {
-        args.push("--fresh");
-      }
+      appendTaskResumeArgs(args, input);
       pushValue(args, input.model, "--model");
       pushValue(args, input.effort, "--effort");
-      if (input.worktreeName) {
-        pushValue(args, input.worktreeName, "--worktree-name");
-      } else {
-        pushFlag(args, input.worktree, "--worktree");
-      }
-      pushValue(args, input.worktreeRef, "--worktree-ref");
+      appendTaskWorktreeArgs(args, input);
       pushFlag(args, input.check, "--check");
       pushValue(args, input.bestOfN, "--best-of-n");
       pushFlag(args, input.verbatim, "--verbatim");
@@ -487,6 +548,20 @@ export function buildCompanionInvocation(toolName, input = {}) {
         args.push(String(input.prompt));
       }
       break;
+    case "grok_implement": {
+      command = "task";
+      args.push(command);
+      pushFlag(args, input.background, "--background");
+      appendTaskResumeArgs(args, input);
+      pushValue(args, resolveImplementModel(input), "--model");
+      pushValue(args, input.effort, "--effort");
+      appendTaskWorktreeArgs(args, input);
+      args.push("--check");
+      appendControlArgs(args, input);
+      pushFlag(args, input.json, "--json");
+      args.push(buildImplementationPrompt(input));
+      break;
+    }
     case "grok_plan":
       command = "plan";
       args.push(command);
