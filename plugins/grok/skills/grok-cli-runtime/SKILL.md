@@ -86,6 +86,8 @@ MCP input keys map to companion flags:
   remains an effort preset and must not pin a model id
 - Preserve explicit `model` / `effort` overrides
 - `resume` / `resumeSession` correct the same session; `fresh` starts over
+- `parallelWrite=true` requires a worktree or explicit `allowedFiles` ownership
+- `correctionAttempt` requires resume semantics and is bounded by `maxCorrectionAttempts` (default 2)
 - Host Codex remains planner and final verifier
 
 ## Plan (`grok_plan`)

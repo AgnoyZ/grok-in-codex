@@ -127,6 +127,15 @@ const TOOL_DEFINITIONS = [
           items: { type: "string" },
           description: "Optional commands Grok should run as implementer checks (not host final acceptance)."
         },
+        parallelWrite: booleanSchema(
+          "Mark this as one of multiple concurrent write tasks. Requires a worktree or explicit allowedFiles ownership."
+        ),
+        correctionAttempt: integerSchema(
+          "One-based correction round. Requires resume or resumeSession and must not exceed maxCorrectionAttempts."
+        ),
+        maxCorrectionAttempts: integerSchema(
+          "Maximum correction rounds before the host stops and reports the blocker. Defaults to 2."
+        ),
         resume: booleanSchema("Resume the latest Grok task session for this repository."),
         resumeSession: stringSchema("Resume a specific Grok session id."),
         fresh: booleanSchema("Start a fresh Grok session."),

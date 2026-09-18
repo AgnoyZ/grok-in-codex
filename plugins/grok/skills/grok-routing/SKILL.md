@@ -92,11 +92,13 @@ When workstreams are independent, **run multiple Grok jobs at once**:
 How:
 
 1. Split into independent prompts.
-2. Start each MCP tool with `background=true` when it may take time.
-3. Track each job id via `grok_status`.
-4. Collect results with `grok_result`.
+2. For concurrent writers, assign non-overlapping `allowedFiles` and set `parallelWrite=true`, or give each writer its own worktree.
+3. Start each MCP tool with `background=true` when it may take time.
+4. Track each job id via `grok_status`.
+5. Collect results with `grok_result` and do not finish while a required job is active.
 
 Do **not** serialize independent Grok work just because another job is running.
+Do **not** run concurrent writers against overlapping files or an ambiguous shared scope.
 
 ## Tool map
 

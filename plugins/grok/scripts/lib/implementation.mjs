@@ -30,12 +30,42 @@ export function parseImplementationInput(input = {}) {
     throw new Error("acceptanceCriteria must contain at least one criterion");
   }
 
+  const allowedFiles = normalizeStringList(input.allowedFiles);
+  const correctionAttempt = input.correctionAttempt == null
+    ? null
+    : Number(input.correctionAttempt);
+  const maxCorrectionAttempts = input.maxCorrectionAttempts == null
+    ? 2
+    : Number(input.maxCorrectionAttempts);
+
+  if (!Number.isInteger(maxCorrectionAttempts) || maxCorrectionAttempts < 1) {
+    throw new Error("maxCorrectionAttempts must be a positive integer");
+  }
+  if (correctionAttempt != null) {
+    if (!Number.isInteger(correctionAttempt) || correctionAttempt < 1) {
+      throw new Error("correctionAttempt must be a positive integer");
+    }
+    if (!input.resume && !input.resumeSession) {
+      throw new Error("correctionAttempt requires resume or resumeSession");
+    }
+    if (correctionAttempt > maxCorrectionAttempts) {
+      throw new Error("correctionAttempt exceeds maxCorrectionAttempts");
+    }
+  }
+
+  if (input.parallelWrite && !input.worktree && !input.worktreeName && allowedFiles.length === 0) {
+    throw new Error("parallelWrite requires a worktree or explicit allowedFiles ownership");
+  }
+
   return {
     implementationBrief,
     acceptanceCriteria,
-    allowedFiles: normalizeStringList(input.allowedFiles),
+    allowedFiles,
     forbiddenChanges: normalizeStringList(input.forbiddenChanges),
-    verificationCommands: normalizeStringList(input.verificationCommands)
+    verificationCommands: normalizeStringList(input.verificationCommands),
+    parallelWrite: Boolean(input.parallelWrite),
+    correctionAttempt,
+    maxCorrectionAttempts
   };
 }
 
@@ -57,6 +87,20 @@ function optionalSection(title, items) {
  */
 export function buildImplementationPrompt(input = {}) {
   const spec = parseImplementationInput(input);
+  const correctionSection = spec.correctionAttempt == null
+    ? []
+    : [
+        "",
+        "## Correction round",
+        `This is correction ${spec.correctionAttempt} of at most ${spec.maxCorrectionAttempts}. Preserve accepted work and address only the remaining gaps in the host brief.`
+      ];
+  const parallelSection = !spec.parallelWrite
+    ? []
+    : [
+        "",
+        "## Parallel-write ownership",
+        "This task is one writer in a parallel implementation. Modify only the assigned files or isolated worktree. Stop if the required change crosses another writer's ownership."
+      ];
 
   return [
     "You are the implementer in a host-led Codex → Grok workflow.",
@@ -72,6 +116,8 @@ export function buildImplementationPrompt(input = {}) {
     ...optionalSection("Allowed files", spec.allowedFiles),
     ...optionalSection("Forbidden changes", spec.forbiddenChanges),
     ...optionalSection("Verification commands", spec.verificationCommands),
+    ...correctionSection,
+    ...parallelSection,
     "",
     "## Implementation contract",
     "- Treat the host-approved plan as authoritative.",
@@ -79,6 +125,7 @@ export function buildImplementationPrompt(input = {}) {
     "- Stay inside allowed-file and forbidden-change constraints when they are provided.",
     "- If verification commands are listed, run them and report exact results.",
     "- Report exact changed files, commands with outcomes, and remaining risks.",
+    "- Report every acceptance criterion as pass, fail, or unverified, with concrete evidence.",
     "- If constraints conflict or a required change is blocked, stop and report the conflict. Do not improvise around it."
   ].join("\n");
 }

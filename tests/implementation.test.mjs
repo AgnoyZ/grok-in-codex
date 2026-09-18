@@ -10,6 +10,7 @@ import {
   buildImplementationPrompt,
   parseImplementationInput
 } from "../plugins/grok/scripts/lib/implementation.mjs";
+import { buildCompanionInvocation } from "../plugins/grok/mcp/server.mjs";
 
 const COMPANION_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -75,6 +76,39 @@ test("parseImplementationInput requires a brief and at least one criterion", () 
   assert.deepEqual(spec.allowedFiles, ["src/retry.ts"]);
 });
 
+test("parallel writers require ownership or worktree isolation", () => {
+  assert.throws(
+    () => parseImplementationInput({ ...IMPLEMENT_INPUT, allowedFiles: [], parallelWrite: true }),
+    /worktree or explicit allowedFiles/
+  );
+  assert.doesNotThrow(() => parseImplementationInput({
+    ...IMPLEMENT_INPUT,
+    parallelWrite: true
+  }));
+  assert.doesNotThrow(() => parseImplementationInput({
+    ...IMPLEMENT_INPUT,
+    allowedFiles: [],
+    parallelWrite: true,
+    worktree: true
+  }));
+});
+
+test("corrections require the same session and respect the retry bound", () => {
+  assert.throws(
+    () => parseImplementationInput({ ...IMPLEMENT_INPUT, correctionAttempt: 1 }),
+    /requires resume/
+  );
+  assert.throws(
+    () => parseImplementationInput({
+      ...IMPLEMENT_INPUT,
+      resume: true,
+      correctionAttempt: 3,
+      maxCorrectionAttempts: 2
+    }),
+    /exceeds/
+  );
+});
+
 test("buildImplementationPrompt is host-plan-authoritative and reconstructs structured fields", () => {
   const prompt = buildImplementationPrompt(IMPLEMENT_INPUT);
 
@@ -108,8 +142,38 @@ test("buildImplementationPrompt is host-plan-authoritative and reconstructs stru
   assert.ok(contract.some((item) => /authoritative/i.test(item)));
   assert.ok(contract.some((item) => /Implement all requested changes/i.test(item)));
   assert.ok(contract.some((item) => /changed files/i.test(item)));
+  assert.ok(contract.some((item) => /pass, fail, or unverified/i.test(item)));
   assert.ok(contract.some((item) => /stop and report/i.test(item)));
   assert.ok(contract.some((item) => /Do not improvise/i.test(item)));
+});
+
+test("prompt includes correction and parallel-write contracts", () => {
+  const prompt = buildImplementationPrompt({
+    ...IMPLEMENT_INPUT,
+    resume: true,
+    correctionAttempt: 1,
+    parallelWrite: true
+  });
+
+  assert.match(prompt, /correction 1 of at most 2/i);
+  assert.match(prompt, /Parallel-write ownership/);
+});
+
+test("grok_implement keeps deep default, check, and resume flags", () => {
+  const invocation = buildCompanionInvocation("grok_implement", {
+    ...IMPLEMENT_INPUT,
+    resume: true,
+    correctionAttempt: 1
+  });
+
+  assert.equal(invocation.command, "task");
+  assert.deepEqual(invocation.args.slice(0, 5), [
+    "task",
+    "--resume-last",
+    "--model",
+    "deep",
+    "--check"
+  ]);
 });
 
 test("buildImplementationPrompt omits empty optional sections", () => {
