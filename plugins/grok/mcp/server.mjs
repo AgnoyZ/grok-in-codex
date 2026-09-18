@@ -6,7 +6,7 @@ import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
-const SERVER_VERSION = "0.5.8";
+const SERVER_VERSION = "0.5.9";
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const COMPANION = path.join(ROOT_DIR, "scripts", "grok-companion.mjs");
 
@@ -21,7 +21,7 @@ const WORKSPACE_PROPERTY = {
 
 /** Shared control surface for long-running Grok jobs (mirrors Claude companion flags). */
 const CONTROL_PROPERTIES = {
-  sandbox: stringSchema("Grok sandbox profile (e.g. read-only, workspace-write)."),
+  sandbox: stringSchema("Grok sandbox profile (e.g. read-only, workspace)."),
   planMode: booleanSchema("Enable Grok plan mode (--plan)."),
   permissionMode: stringSchema("Permission mode passed to Grok."),
   agent: stringSchema("Grok agent name to use."),
@@ -46,7 +46,7 @@ const CONTROL_PROPERTIES = {
 const COMMON_JOB_PROPERTIES = {
   ...WORKSPACE_PROPERTY,
   background: booleanSchema("Start a background job and return the job id."),
-  model: stringSchema("Grok model id or alias, such as fast or deep."),
+  model: stringSchema("Grok model id or effort preset (fast/deep). Omit it to use the Grok CLI configured default model."),
   effort: stringSchema("Reasoning effort: none, minimal, low, medium, high, xhigh, or max."),
   json: booleanSchema("Return machine-readable JSON from the companion."),
   ...CONTROL_PROPERTIES

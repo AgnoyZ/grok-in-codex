@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -15,16 +13,10 @@ const MOCK = path.resolve(
 
 test("mock GROK_BINARY finish path returns usage and text", () => {
   const prev = process.env.GROK_BINARY;
-  // grok.mjs resolveGrokBinary checks GROK_BINARY file existence — use node wrapper
-  const wrapper = path.join(os.tmpdir(), `mock-grok-bin-${Date.now()}`);
-  fs.writeFileSync(
-    wrapper,
-    `#!/usr/bin/env bash\nexec node ${JSON.stringify(MOCK)} "$@"\n`,
-    { mode: 0o755 }
-  );
-  process.env.GROK_BINARY = wrapper;
+  process.env.GROK_BINARY = process.execPath;
   try {
     const result = runGrok({
+      binaryArgs: [MOCK],
       prompt: "hello",
       write: false,
       cwd: process.cwd()
@@ -43,11 +35,6 @@ test("mock GROK_BINARY finish path returns usage and text", () => {
   } finally {
     if (prev === undefined) delete process.env.GROK_BINARY;
     else process.env.GROK_BINARY = prev;
-    try {
-      fs.unlinkSync(wrapper);
-    } catch {
-      // ignore
-    }
   }
 });
 

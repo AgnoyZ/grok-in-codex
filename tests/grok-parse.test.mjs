@@ -30,9 +30,10 @@ test("parseGrokJsonOutput reads error payload", () => {
   assert.match(parsed.error, /nope/);
 });
 
-test("buildGrokArgs write mode uses yolo", () => {
+test("buildGrokArgs write mode uses Grok CLI 1.x auto-approval", () => {
   const args = buildGrokArgs({ prompt: "hi", write: true, model: "grok-4.5" });
-  assert.ok(args.includes("--yolo"));
+  assert.ok(args.includes("--always-approve"));
+  assert.ok(!args.includes("--yolo"));
   assert.ok(args.includes("-m"));
   assert.ok(args.includes("grok-4.5"));
 });
@@ -40,6 +41,7 @@ test("buildGrokArgs write mode uses yolo", () => {
 test("buildGrokArgs read-only mode uses denylist not allowlist", () => {
   const args = buildGrokArgs({ prompt: "review", write: false });
   assert.ok(!args.includes("--yolo"));
+  assert.ok(!args.includes("--always-approve"));
   assert.ok(!args.includes("--tools"));
   assert.ok(args.includes("--disallowed-tools"));
   assert.ok(args.some((a) => String(a).includes("run_terminal_cmd")));
@@ -55,6 +57,7 @@ test("buildGrokArgs media mode avoids tools allowlist and yolo", () => {
   });
   assert.ok(!args.includes("--tools"));
   assert.ok(!args.includes("--yolo"));
+  assert.ok(!args.includes("--always-approve"));
   assert.ok(args.includes("--disallowed-tools"));
   assert.ok(args.some((a) => String(a).includes("run_terminal_cmd")));
 });

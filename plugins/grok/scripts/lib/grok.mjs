@@ -25,14 +25,20 @@ export function resolveGrokBinary() {
     return envPath;
   }
 
-  const which = runCommand("which", ["grok"]);
-  if (which.status === 0 && which.stdout.trim()) {
-    return which.stdout.trim();
+  const lookupCommand = process.platform === "win32" ? "where.exe" : "which";
+  const lookupName = process.platform === "win32" ? "grok.exe" : "grok";
+  const lookup = runCommand(lookupCommand, [lookupName]);
+  if (lookup.status === 0 && lookup.stdout.trim()) {
+    return lookup.stdout.trim().split(/\r?\n/)[0];
   }
 
-  const homeCandidate = path.join(os.homedir(), ".grok", "bin", "grok");
-  if (fs.existsSync(homeCandidate)) {
-    return homeCandidate;
+  const homeCandidates = process.platform === "win32"
+    ? [path.join(os.homedir(), ".grok", "bin", "grok.exe"), path.join(os.homedir(), ".grok", "bin", "grok")]
+    : [path.join(os.homedir(), ".grok", "bin", "grok")];
+  for (const homeCandidate of homeCandidates) {
+    if (fs.existsSync(homeCandidate)) {
+      return homeCandidate;
+    }
   }
 
   return null;
@@ -112,6 +118,17 @@ export function getGrokAuthStatus() {
     return { authenticated: true, detail: "Authenticated (models list succeeded)" };
   }
 
+  const authFile = path.join(os.homedir(), ".grok", "auth.json");
+  if (
+    fs.existsSync(authFile) &&
+    /timed out|network error|failed to fetch models|settings fetch failed/i.test(combined)
+  ) {
+    return {
+      authenticated: true,
+      detail: "Credentials are present; the remote model catalog check was unavailable."
+    };
+  }
+
   return {
     authenticated: false,
     detail: (stderr || stdout || "Unable to verify Grok authentication").trim()
@@ -155,9 +172,8 @@ export function buildGrokArgs(options = {}) {
   if (options.bestOfN && Number(options.bestOfN) > 1) {
     args.push("--best-of-n", String(options.bestOfN));
   }
-  if (options.check) {
-    args.push("--check");
-  }
+  // Grok CLI 1.x removed --check. The companion retains this option as
+  // orchestration metadata and asks for verification in the task prompt.
   if (options.worktree) {
     if (typeof options.worktree === "string" && options.worktree !== "true") {
       args.push("--worktree", options.worktree);
@@ -206,7 +222,7 @@ export function buildGrokArgs(options = {}) {
     args.push("--no-plan");
   }
 
-  // Tool gating strategy (Grok 0.2.93-safe):
+  // Tool gating strategy for Grok CLI 1.x:
   // - Prefer --disallowed-tools (denylist) over --tools (allowlist).
   // - Only pass --tools when forceToolsAllowlist is true (debug / future CLI).
   if (options.forceToolsAllowlist && options.tools) {
@@ -222,7 +238,7 @@ export function buildGrokArgs(options = {}) {
   } else if (options.write && !isPlanMode) {
     // Full coding agent: default toolset + auto-approve.
     if (options.yolo !== false) {
-      args.push("--yolo");
+      args.push("--always-approve");
     }
   } else if (!options.write || isPlanMode) {
     // Read-only review / diagnosis / plan mode: strip shell + source editors.
@@ -306,7 +322,7 @@ export function humanizeGrokFailure(sources = {}) {
   }
 
   if (/model .+ not found|unknown model|invalid model/i.test(blob)) {
-    return "Grok rejected the model id. Use a valid model (e.g. `grok-4.5` or `--model fast`).";
+    return "Grok rejected the model id. Omit `--model` to use the Grok CLI configured default, use `--model fast|deep` as an effort preset, or provide a valid model id.";
   }
 
   // Prefer structured JSON error message if present in the blob
@@ -413,7 +429,7 @@ export function runGrok(options = {}) {
     throw new Error(availability.reason);
   }
 
-  const args = buildGrokArgs(options);
+  const args = [...(options.binaryArgs || []), ...buildGrokArgs(options)];
   const result = runCommand(availability.binary, args, {
     cwd: options.cwd,
     maxBuffer: options.maxBuffer ?? 40 * 1024 * 1024,

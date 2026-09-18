@@ -18,10 +18,17 @@ const COMPANION = path.resolve(
 test("result reconciles reaper-failed plan with result.json and harvests plan.md", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "grok-bg-fin-"));
   const stateRoot = path.join(root, "state");
-  const cwd = path.join(root, "repo");
+  let cwd = path.join(root, "repo");
   fs.mkdirSync(cwd, { recursive: true });
   // Minimal git repo for workspace root resolution
-  spawnSync("git", ["init"], { cwd, encoding: "utf8" });
+  const init = spawnSync("git", ["init"], { cwd, encoding: "utf8" });
+  assert.equal(init.status, 0, init.stderr || init.stdout);
+  const gitRoot = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd,
+    encoding: "utf8"
+  });
+  assert.equal(gitRoot.status, 0, gitRoot.stderr || gitRoot.stdout);
+  cwd = path.normalize(gitRoot.stdout.trim());
 
   const slug = "repo";
   // Mirror resolveStateDir hash: we write under GROK_CODEX_PLUGIN_STATE directly

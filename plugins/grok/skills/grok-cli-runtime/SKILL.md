@@ -66,10 +66,13 @@ MCP input keys map to companion flags:
 ## Task (`grok_rescue`)
 
 - Exactly one `task` invocation per handoff
-- Map `fast` → `--model grok-composer-2.5-fast`
-- Map `deep` → `--model grok-4.5 --effort high`
+- `fast` uses the Grok CLI configured default model with `--effort low`
+- `deep` uses the Grok CLI configured default model with `--effort high`
+- `default` and `grok` use the Grok CLI configured default model without forcing an effort
+- Only an explicit model id is forwarded with `--model`; never hard-code the configured model
 - `resume` → `--resume-last`; `resumeSession` → resume that id; `fresh` → no resume
-- Pass `worktree`, `check`, `bestOfN` through when present
+- Pass `worktree` and `bestOfN` through when present. Keep `check` as
+  companion-side verification metadata because Grok CLI 1.x removed `--check`.
 - Default write-capable; `readOnly` only when requested
 
 ## Plan (`grok_plan`)

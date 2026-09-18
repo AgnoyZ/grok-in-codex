@@ -232,7 +232,7 @@ export function renderTaskResult(payload) {
   } else if (payload.kind === "plan" || payload.config?.planMode) {
     lines.push("- **Mode**: plan (`--permission-mode plan`)");
   } else if (payload.write) {
-    lines.push("- **Mode**: write-capable (`--yolo`)");
+    lines.push("- **Mode**: write-capable (`--always-approve`)");
   } else {
     lines.push("- **Mode**: read-only (denylist)");
   }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.9
+
+### Fixed
+- **Grok CLI 1.x compatibility**: discover `grok.exe` on Windows, use `--always-approve`, and stop forwarding the removed `--check` flag.
+- **Dynamic model selection**: `fast` and `deep` now adjust reasoning effort while inheriting the model configured in Grok CLI; explicit model IDs still override it.
+- **Authentication fallback**: accept existing credentials when the remote model catalog times out.
+- **Runtime vocabulary**: use the supported `workspace` sandbox profile in MCP guidance.
+
 ## 0.5.8
 
 ### Fixed

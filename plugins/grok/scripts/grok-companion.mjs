@@ -69,6 +69,7 @@ import {
   extractArtifactPaths,
   resolveMediaOutputDir
 } from "./lib/media.mjs";
+import { normalizeEffort, normalizeModel } from "./lib/models.mjs";
 import { readPidFile, runCommand, terminateProcessTree, writePidFile } from "./lib/process.mjs";
 import {
   renderBackgroundStarted,
@@ -97,16 +98,6 @@ import {
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
-const VALID_EFFORTS = new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
-const MODEL_ALIASES = new Map([
-  ["fast", "grok-composer-2.5-fast"],
-  ["default", "grok-4.5"],
-  ["deep", "grok-4.5"],
-  ["grok", "grok-4.5"]
-]);
-const PRESET_EFFORT = new Map([
-  ["deep", "high"]
-]);
 
 function printUsage() {
   console.log(
@@ -169,34 +160,6 @@ function outputResult(value, asJson) {
   } else {
     process.stdout.write(value);
   }
-}
-
-function normalizeModel(model) {
-  if (model == null) {
-    return null;
-  }
-  const normalized = String(model).trim();
-  if (!normalized) {
-    return null;
-  }
-  return MODEL_ALIASES.get(normalized.toLowerCase()) ?? normalized;
-}
-
-function normalizeEffort(effort, modelAlias) {
-  if (effort == null && modelAlias && PRESET_EFFORT.has(String(modelAlias).toLowerCase())) {
-    return PRESET_EFFORT.get(String(modelAlias).toLowerCase());
-  }
-  if (effort == null) {
-    return null;
-  }
-  const normalized = String(effort).trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-  if (!VALID_EFFORTS.has(normalized)) {
-    throw new Error(`Invalid --effort value: ${effort}. Expected one of ${[...VALID_EFFORTS].join(", ")}`);
-  }
-  return normalized === "max" ? "xhigh" : normalized;
 }
 
 function titleFromPrompt(prompt, fallback = "Grok task") {

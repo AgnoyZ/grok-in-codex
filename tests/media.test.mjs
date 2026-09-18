@@ -14,14 +14,16 @@ import {
 } from "../plugins/grok/scripts/lib/media.mjs";
 
 test("encodeGrokSessionWorkspaceKey percent-encodes slashes", () => {
-  const key = encodeGrokSessionWorkspaceKey("/Users/me/proj");
-  assert.equal(key, "%2FUsers%2Fme%2Fproj");
+  const workspace = path.join(os.tmpdir(), "grok-session-key-test");
+  const key = encodeGrokSessionWorkspaceKey(workspace);
+  assert.equal(key, encodeURIComponent(path.resolve(workspace)));
 });
 
 test("resolveGrokSessionDir nests under ~/.grok/sessions", () => {
-  const dir = resolveGrokSessionDir("/tmp/ws", "sess-abc");
+  const workspace = path.join(os.tmpdir(), "grok-session-dir-test");
+  const dir = resolveGrokSessionDir(workspace, "sess-abc");
   assert.ok(dir.includes(path.join(".grok", "sessions")));
-  assert.ok(dir.endsWith(path.join("%2Ftmp%2Fws", "sess-abc")));
+  assert.ok(dir.endsWith(path.join(encodeGrokSessionWorkspaceKey(workspace), "sess-abc")));
 });
 
 test("copyMediaToDir copies into destination with unique names", () => {
