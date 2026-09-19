@@ -23,11 +23,28 @@ export function withStateLock(stateDir, operation, { timeoutMs = 10000 } = {}) {
   finally { releaseWorkspaceLock(lock, id); }
 }
 
+export function renameAtomic(temporary, file, {
+  platform = process.platform,
+  renameSync = fs.renameSync,
+  maxRetries = 10,
+  retryDelayMs = 10
+} = {}) {
+  const retryable = new Set(['EACCES', 'EBUSY', 'EPERM']);
+  const wait = new Int32Array(new SharedArrayBuffer(4));
+  for (let attempt = 0; ; attempt++) {
+    try { return renameSync(temporary, file); }
+    catch (error) {
+      if (platform !== 'win32' || !retryable.has(error.code) || attempt >= maxRetries) throw error;
+      Atomics.wait(wait, 0, 0, retryDelayMs * (attempt + 1));
+    }
+  }
+}
+
 export function writeJsonAtomic(file, value) {
   const temporary = `${file}.tmp-${process.pid}-${randomUUID()}`;
   try {
     fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
-    fs.renameSync(temporary, file);
+    renameAtomic(temporary, file);
   } finally {
     try { fs.unlinkSync(temporary); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }

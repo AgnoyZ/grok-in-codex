@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import test from 'node:test';
 import { loadState, resolveStateFile, resolveStateDir, setConfig, updateState } from '../plugins/grok/scripts/lib/jobs.mjs';
-import { withStateLock } from '../plugins/grok/scripts/lib/state-store.mjs';
+import { renameAtomic, withStateLock } from '../plugins/grok/scripts/lib/state-store.mjs';
 import { collectDesignArtifacts, collectDocumentArtifacts, extractDesignDocPathFromText, resolveLatestDesignDoc } from '../plugins/grok/scripts/lib/artifacts.mjs';
 import { assertBestOfNSupported, runGrok, spawnGrokBackground } from '../plugins/grok/scripts/lib/grok.mjs';
 
@@ -31,6 +31,24 @@ function worker(source, args = []) {
 }
 const jobsUrl = new URL('../plugins/grok/scripts/lib/jobs.mjs', import.meta.url).href;
 const storeUrl = new URL('../plugins/grok/scripts/lib/state-store.mjs', import.meta.url).href;
+
+test('atomic state replacement retries transient Windows file contention', () => {
+  let attempts = 0;
+  renameAtomic('temporary', 'state.json', {
+    platform: 'win32',
+    retryDelayMs: 0,
+    renameSync() {
+      attempts++;
+      if (attempts < 3) throw Object.assign(new Error('busy'), { code: 'EPERM' });
+    }
+  });
+  assert.equal(attempts, 3);
+
+  assert.throws(() => renameAtomic('temporary', 'state.json', {
+    platform: 'win32',
+    renameSync() { throw Object.assign(new Error('invalid'), { code: 'EINVAL' }); }
+  }), /invalid/);
+});
 
 test('concurrent state updates retain every job and configuration; readers see complete JSON', async t => {
   const cwd = temporary(t);
