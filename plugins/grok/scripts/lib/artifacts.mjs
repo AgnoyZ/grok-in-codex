@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import {
@@ -64,17 +63,32 @@ export function collectPlanArtifacts(cwd, sessionId, { jobId = null } = {}) {
  */
 export function extractDesignDocPathFromText(text) {
   const pathMarkers = [
-    /DESIGN_DOC_PATH\s*=\s*(\S+)/i,
-    /design document (?:is )?at:\s*(\S+\.md)/i,
-    /wrote (?:the )?design document to:\s*(\S+\.md)/i
+    /DESIGN_DOC_PATH\s*=\s*([^\r\n]+)/i,
+    /design document (?:is )?at:\s*([^\r\n]+)/i,
+    /wrote (?:the )?design document to:\s*([^\r\n]+)/i
   ];
   for (const re of pathMarkers) {
     const m = String(text || "").match(re);
     if (m?.[1]) {
-      return m[1].replace(/[`'"]/g, "").replace(/[.,;:]+$/, "");
+      const candidate = parseArtifactPath(m[1], 'md');
+      if (candidate) return candidate;
     }
   }
   return null;
+}
+
+// Preserve Windows separators, spaces and embedded apostrophes. Quotes delimit
+// the whole path; unquoted markers end at the expected file extension.
+function parseArtifactPath(value, extensions) {
+  const text = String(value).trim();
+  const quote = text[0];
+  if (['"', "'", '`'].includes(quote)) {
+    const end = text.indexOf(quote, 1);
+    if (end < 0) return null;
+    const candidate = text.slice(1, end);
+    return new RegExp(`\\.(?:${extensions})$`, 'i').test(candidate) ? candidate : null;
+  }
+  return text.match(new RegExp(`^(.+?\\.(?:${extensions}))(?=$|[\\s.,;:)"'\\x60])`, 'i'))?.[1] || null;
 }
 
 /**
@@ -136,7 +150,7 @@ export function resolveExecutePlanDesignPath(cwd, designDocPath, { latest = fals
 }
 
 /**
- * Find design doc files in text/scratch/session and copy to .grok/designs/.
+ * Find explicitly reported or current-session design docs and copy to .grok/designs/.
  */
 export function collectDesignArtifacts(cwd, { sessionId = null, text = "", jobId = null } = {}) {
   const artifacts = [];
@@ -147,31 +161,10 @@ export function collectDesignArtifacts(cwd, { sessionId = null, text = "", jobId
     candidates.push(marked);
   }
 
-  // Scratch pattern (Grok design skill layout)
-  const tmpRoot = process.env.TMPDIR || os.tmpdir();
-  const uid = typeof process.getuid === "function" ? process.getuid() : "user";
-  const scratchHint = path.join(tmpRoot, `grok-${uid}`);
-  if (fs.existsSync(scratchHint)) {
-    try {
-      for (const name of fs.readdirSync(scratchHint)) {
-        if (/^grok-design-doc-.*\.md$/i.test(name)) {
-          candidates.push(path.join(scratchHint, name));
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  if (sessionId) {
+  // Only fall back to this job's session when no explicit artifact was reported.
+  if (!marked && sessionId) {
     const sessionDir = resolveGrokSessionDir(cwd, sessionId);
     walkMdFiles(sessionDir, candidates, 2);
-  }
-
-  // Existing project designs (prefer recent copies)
-  const designsDir = path.join(cwd, ".grok/designs");
-  if (fs.existsSync(designsDir)) {
-    walkMdFiles(designsDir, candidates, 1);
   }
 
   const destDir = ensureProjectArtifactDir(cwd, ".grok/designs");
@@ -309,9 +302,19 @@ export function collectDocumentArtifacts(cwd, { text = "", sessionId = null, job
   const candidates = [];
 
   // Paths mentioned in text
+  let remaining = String(text).replace(/DOCUMENT_PATH\s*=\s*([^\r\n]+)/gi, (match, value) => {
+    const candidate = parseArtifactPath(value, 'docx|pdf|pptx|dotx');
+    if (candidate) candidates.push(candidate);
+    return candidate ? '' : match;
+  });
+  remaining = remaining.replace(/([`"'])([^\r\n]+?)\1/g, match => {
+    const candidate = parseArtifactPath(match, 'docx|pdf|pptx|dotx');
+    if (candidate) candidates.push(candidate);
+    return candidate ? '' : match;
+  });
   const pathRe = /(?:^|[\s`'"(])(\/?[^\s`'")]+?\.(?:docx|pdf|pptx|dotx))/gi;
   let match;
-  while ((match = pathRe.exec(String(text)))) {
+  while ((match = pathRe.exec(remaining))) {
     candidates.push(match[1]);
   }
 

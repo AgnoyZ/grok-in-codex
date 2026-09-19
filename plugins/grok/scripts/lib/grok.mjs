@@ -25,6 +25,20 @@ export function resolveJobTimeout(value, env = process.env) {
   return minutes;
 }
 
+export function assertBestOfNSupported(binary, options = {}, run = runCommand) {
+  if (options.bestOfN == null) return;
+  const count = Number(options.bestOfN);
+  if (!Number.isSafeInteger(count) || count < 1) throw new Error('bestOfN must be a positive integer.');
+  if (count === 1) return;
+  // Ask the CLI parser directly; hidden flags need not be listed in --help.
+  const result = run(binary, [...(options.binaryArgs || []), '--best-of-n', String(count), '--help'], {
+    timeout: 10000, maxBuffer: 2 * 1024 * 1024, env: { ...process.env, ...(options.env || {}) }
+  });
+  if (result.status !== 0 || !/(?:usage|options)\s*:/i.test(String(result.stdout))) {
+    throw new Error('The installed Grok CLI does not confirm support for bestOfN > 1 (--best-of-n). Remove bestOfN or set it to 1; no generation was started.');
+  }
+}
+
 export function resolveGrokBinary() {
   const envPath = process.env.GROK_BINARY;
   if (envPath && fs.existsSync(envPath)) {
@@ -435,6 +449,7 @@ export function runGrok(options = {}) {
     throw new Error(availability.reason);
   }
 
+  assertBestOfNSupported(availability.binary, options);
   const args = [...(options.binaryArgs || []), ...buildGrokArgs(options)];
   const result = runCommand(availability.binary, args, {
     cwd: options.cwd,
@@ -814,6 +829,7 @@ export function spawnGrokBackground(options = {}) {
     throw new Error(availability.reason);
   }
 
+  assertBestOfNSupported(availability.binary, options);
   const useStreaming = Boolean(options.progressFile);
   const args = buildGrokArgs({
     ...options,

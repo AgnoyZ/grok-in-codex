@@ -4,6 +4,12 @@ This changelog follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Serialize state read-modify-write operations across processes, including retention index updates, and atomically publish state/job JSON. Corrupt state is preserved and reported rather than reset.
+- Collect design artifacts only from explicit output paths or the current session; shared temporary directories and historical project designs are no longer harvested into new jobs.
+- Preserve spaces, Windows separators and quoted paths in design/document output markers.
+- Preflight `bestOfN > 1` against the CLI parser in foreground and background execution, with an actionable error when unsupported instead of launching a failing generation.
+
 ### Changed
 - Default project outputs now use `.grok/{plans,designs,workflows,docs,reviews,media}/`, including latest-design lookup, prompts, MCP descriptions and skill examples.
 - Setup excludes the six unified artifact subdirectories locally without ignoring unrelated `.grok/` configuration.

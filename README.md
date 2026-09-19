@@ -198,7 +198,7 @@ Default state root when unset: `~/.grok/codex-plugin/state/`. Codex does **not**
 - Use `readOnly=true` for investigation-only work.
 - Explicit `worktree=false` or `readOnly=false` opts into direct writes when no worktree is requested. Explicit `worktree=true` overrides the environment opt-out; `readOnly=true` takes priority over worktree settings. Results report `executionMode` (`direct`, `worktree`, or `readOnly`).
 - Direct companion `task` uses the same default. Use `--write`, `--worktree=false` or `--read-only=false` for direct writes, or `--read-only` to investigate.
-- Use `check=true` / `bestOfN` for verification or multiple attempts within the job.
+- Use `check=true` for verification. `bestOfN > 1` requires CLI support for `--best-of-n`, checked before generation. Grok 1.0.34 rejects that flag; omit `bestOfN` or use `1` with that version.
 - `check=true` appends a verification contract to the prompt (Grok CLI 1.x has no `--check` flag). That is implementer evidence, not host final acceptance.
 - Full control surface available (sandbox, memory, agent, allow/deny, maxTurns, …).
 

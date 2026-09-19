@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isSameProcess, runCommand } from './process.mjs';
 import { ARTIFACT_LAYOUT } from './artifact-discovery.mjs';
+import { withStateLock, writeJsonAtomic } from './state-store.mjs';
 
 function retentionValue(value, fallback) {
   const number = Number(value ?? fallback);
@@ -74,9 +75,11 @@ export function cleanupJobs(root, { now = Date.now(), force = false, env = proce
     for (const [stateDir, ids] of removedByState) {
       const file = path.join(stateDir, 'state.json');
       if (!fs.existsSync(file)) continue;
-      const state = JSON.parse(fs.readFileSync(file, 'utf8'));
-      state.jobs = (state.jobs || []).filter(job => !ids.has(job.id));
-      fs.writeFileSync(file, JSON.stringify(state, null, 2) + '\n');
+      withStateLock(stateDir, () => {
+        const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+        state.jobs = (state.jobs || []).filter(job => !ids.has(job.id));
+        writeJsonAtomic(file, state);
+      });
     }
     fs.writeFileSync(stamp, JSON.stringify({ at: now }));
     return { removed, throttled: false };

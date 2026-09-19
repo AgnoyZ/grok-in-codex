@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { isSameProcess, readPidFile } from "./process.mjs";
 import { releaseWorkspaceLock } from './locks.mjs';
+import { withStateLock, writeJsonAtomic } from './state-store.mjs';
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
 const STATE_VERSION = 3;
@@ -197,8 +198,8 @@ export function loadState(cwd) {
       taskSessions: Array.isArray(parsed.taskSessions) ? parsed.taskSessions : [],
       jobs: Array.isArray(parsed.jobs) ? parsed.jobs : []
     };
-  } catch {
-    return defaultState();
+  } catch (error) {
+    throw new Error(`Cannot read job state ${stateFile}: ${error.message}`);
   }
 }
 
@@ -216,6 +217,10 @@ function pruneTaskSessions(sessions) {
 }
 
 export function saveState(cwd, state) {
+  return withStateLock(resolveStateDir(cwd), () => saveStateUnlocked(cwd, state));
+}
+
+function saveStateUnlocked(cwd, state) {
   ensureStateDir(cwd);
   const next = {
     version: STATE_VERSION,
@@ -227,14 +232,16 @@ export function saveState(cwd, state) {
     },
     jobs: pruneJobs(state.jobs ?? [])
   };
-  fs.writeFileSync(resolveStateFile(cwd), `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  writeJsonAtomic(resolveStateFile(cwd), next);
   return next;
 }
 
 export function updateState(cwd, mutate) {
-  const state = loadState(cwd);
-  mutate(state);
-  return saveState(cwd, state);
+  return withStateLock(resolveStateDir(cwd), () => {
+    const state = loadState(cwd);
+    mutate(state);
+    return saveStateUnlocked(cwd, state);
+  });
 }
 
 export function getConfig(cwd) {
@@ -282,7 +289,7 @@ export function listJobs(cwd) {
 export function writeJobFile(cwd, job) {
   ensureStateDir(cwd);
   const filePath = resolveJobFile(cwd, job.id);
-  fs.writeFileSync(filePath, `${JSON.stringify(job, null, 2)}\n`, "utf8");
+  writeJsonAtomic(filePath, job);
   return filePath;
 }
 

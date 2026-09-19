@@ -90,7 +90,7 @@ const TOOL_DEFINITIONS = [
         check: booleanSchema(
           "Require Grok to run relevant tests/static checks and report exact command outcomes. Does not replace host verification."
         ),
-        bestOfN: integerSchema("Run N parallel attempts of the same task and keep the best."),
+        bestOfN: integerSchema("Run N parallel attempts when the installed Grok CLI supports --best-of-n. Unsupported values above 1 fail before generation; omit or use 1 for a single attempt."),
         verbatim: booleanSchema("Avoid adding extra wrapper instructions to the prompt."),
         ...COMMON_JOB_PROPERTIES
       }
