@@ -440,7 +440,7 @@ test("stdio MCP transport speaks NDJSON (Codex framing)", async () => {
     if (init && tools && status) {
       child.kill();
       assert.equal(init.result?.serverInfo?.name, "grok-in-codex");
-      assert.equal(init.result?.serverInfo?.version, "0.6.0");
+      assert.equal(init.result?.serverInfo?.version, JSON.parse(fs.readFileSync(new URL('../plugins/grok/.codex-plugin/plugin.json', import.meta.url), 'utf8')).version);
       assert.ok(Array.isArray(tools.result?.tools));
       assert.equal(tools.result.tools.length, EXPECTED_TOOLS.length);
       assert.ok(tools.result.tools.some((t) => t.name === "grok_implement"));

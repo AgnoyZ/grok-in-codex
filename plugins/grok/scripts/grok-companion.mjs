@@ -7,6 +7,15 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { expandArgv, parseArgs } from "./lib/args.mjs";
+import { acquireWorkspaceLock, transferWorkspaceLock, releaseWorkspaceLock } from './lib/locks.mjs';
+import { getProcessStartTime, isSameProcess } from './lib/process.mjs';
+import { resolvePluginStateRoot } from './lib/jobs.mjs';
+import { resolveRescueMode } from './lib/rescue.mjs';
+import { resolveJobTimeout } from './lib/grok.mjs';
+import { cleanupJobs, excludeGrokArtifacts } from './lib/maintenance.mjs';
+import { limitResult } from './lib/result-limit.mjs';
+import { probeCapabilities } from './lib/capabilities.mjs';
+import { READ_ONLY_DISALLOWED_TOOLS, MEDIA_DISALLOWED_TOOLS } from './lib/grok.mjs';
 import {
   collectDesignArtifacts,
   collectDocumentArtifacts,
@@ -52,6 +61,7 @@ import {
   readJobFile,
   readJobProgress,
   recordTaskSession,
+  refreshJobLiveness,
   resolveJob,
   resolveJobLogFile,
   resolveJobPidFile,
@@ -99,6 +109,7 @@ import {
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+let requestedTimeout;
 
 function printUsage() {
   console.log(
@@ -390,7 +401,7 @@ function maybeFinalizeBackgroundJob(cwd, job) {
 
   const error = ok
     ? null
-    : humanizeGrokFailure({
+    : payload.timedOut ? 'Background job timeout' : humanizeGrokFailure({
         parsedError: parsed.error,
         stderr: payload.stderr,
         stdout: payload.stdout,
@@ -476,6 +487,8 @@ function createJobShell(cwd, { kind, title, prompt, write, model, effort, extras
   const promptFile = writePromptFile(prompt);
   const job = {
     id: jobId,
+    pid: process.pid,
+    pidStartTime: getProcessStartTime(process.pid),
     schemaVersion: 3,
     kind,
     title,
@@ -498,6 +511,8 @@ function createJobShell(cwd, { kind, title, prompt, write, model, effort, extras
 
   upsertJob(cwd, {
     id: jobId,
+    pid: job.pid,
+    pidStartTime: job.pidStartTime,
     kind,
     title,
     status: "running",
@@ -514,23 +529,50 @@ function createJobShell(cwd, { kind, title, prompt, write, model, effort, extras
 }
 
 function runOrBackground(cwd, job, grokOptions, { background, json, renderPayload }) {
+  try {
+    if (job.write || job.media) {
+      job.lockFile = acquireWorkspaceLock(resolvePluginStateRoot(), cwd, job.id, job.worktree ? 'worktree' : 'direct');
+      writeJobFile(cwd, job);
+    }
+    return runJob(cwd, job, grokOptions, { background, json, renderPayload });
+  } catch (error) {
+    if (background && job.pid !== process.pid && job.pid && isSameProcess(job.pid, job.pidStartTime)) terminateProcessTree(job.pid, 'SIGTERM');
+    const failed = { ...job, status: 'failed', finishedAt: nowIso(), error: error.message };
+    upsertJob(cwd, { id: job.id, status: failed.status, finishedAt: failed.finishedAt, error: failed.error });
+    writeJobFile(cwd, failed);
+    if (!background || job.pid === process.pid || !job.pid || !isSameProcess(job.pid, job.pidStartTime)) releaseWorkspaceLock(job.lockFile, job.id);
+    throw error;
+  } finally {
+    if (!background) releaseWorkspaceLock(job.lockFile, job.id);
+  }
+}
+
+function runJob(cwd, job, grokOptions, { background, json, renderPayload }) {
   if (background) {
     const spawned = spawnGrokBackground({
       ...grokOptions,
+      timeoutMinutes: requestedTimeout,
+      lockFile: job.lockFile,
+      jobId: job.id,
       resultFile: job.resultFile,
       logFile: job.logFile,
       progressFile: job.progressFile
     });
+    job.pid = spawned.pid;
+    job.pidStartTime = getProcessStartTime(spawned.pid);
+    transferWorkspaceLock(job.lockFile, job.id, spawned.pid);
     const pidFile = resolveJobPidFile(cwd, job.id);
     writePidFile(pidFile, spawned.pid);
     const runningJob = {
       ...job,
       pid: spawned.pid,
+      pidStartTime: getProcessStartTime(spawned.pid),
+      timeoutMinutes: resolveJobTimeout(requestedTimeout),
       pidFile,
       binary: spawned.binary,
       args: spawned.args
     };
-    upsertJob(cwd, { id: job.id, pid: spawned.pid, status: "running" });
+    upsertJob(cwd, { id: job.id, pid: spawned.pid, pidStartTime: runningJob.pidStartTime, status: "running" });
     writeJobFile(cwd, runningJob);
     const otherRunning = listRunningJobs(cwd)
       .filter((item) => item.id !== job.id)
@@ -544,6 +586,7 @@ function runOrBackground(cwd, job, grokOptions, { background, json, renderPayloa
       kind: job.kind,
       pid: spawned.pid,
       title: job.title,
+      executionMode: job.executionMode,
       status: "running",
       concurrent: true,
       otherRunning
@@ -571,6 +614,7 @@ function runOrBackground(cwd, job, grokOptions, { background, json, renderPayloa
         worktree: job.worktree,
         check: job.check
       };
+  payload.executionMode = job.executionMode;
   outputResult(json ? payload : renderTaskResult(payload), Boolean(json));
   process.exitCode = finished.status === "completed" ? 0 : 1;
   return finished;
@@ -581,6 +625,8 @@ async function commandSetup(argv) {
     booleanOptions: ["json", "enable-review-gate", "disable-review-gate"]
   });
   const cwd = resolveWorkspaceRoot(process.cwd());
+  const cleanup = cleanupJobs(resolvePluginStateRoot(), { force: true });
+  const artifactExclude = excludeGrokArtifacts(cwd);
 
   if (options["enable-review-gate"] && options["disable-review-gate"]) {
     throw new Error("Pass only one of --enable-review-gate or --disable-review-gate");
@@ -626,6 +672,10 @@ async function commandSetup(argv) {
 
   const payload = {
     ready: Boolean(availability.available && auth.authenticated),
+    cleanup,
+    artifactExclude,
+    capabilities: probeCapabilities(availability.binary),
+    disallowedTools: { direct: null, worktree: null, readOnly: READ_ONLY_DISALLOWED_TOOLS, media: MEDIA_DISALLOWED_TOOLS, plan: null },
     available: availability.available,
     binary: availability.binary,
     version: availability.version,
@@ -720,9 +770,7 @@ async function commandTask(argv) {
   const effort = normalizeEffort(options.effort, modelAlias);
   const background = Boolean(options.background);
   const bestOfN = options["best-of-n"] ? Number(options["best-of-n"]) : null;
-  const worktree =
-    options["worktree-name"] ||
-    (options.worktree ? true : false);
+  const { worktree, mode: executionMode } = resolveRescueMode(options);
   const check = Boolean(options.check);
   const prompt = applyVerificationContract(rawPrompt, { check });
 
@@ -757,6 +805,7 @@ async function commandTask(argv) {
     effort,
     extras: {
       resume,
+      executionMode,
       bestOfN,
       worktree: Boolean(worktree),
       check,
@@ -1664,9 +1713,10 @@ async function commandStatus(argv) {
   const cwd = resolveWorkspaceRoot(process.cwd());
   const jobId = positionals[0] || null;
 
+  if (!jobId) cleanupJobs(resolvePluginStateRoot());
   let jobs = listJobs(cwd).map((job) => {
     const stored = readJobFile(cwd, job.id) || job;
-    return maybeFinalizeBackgroundJob(cwd, stored);
+    return maybeFinalizeBackgroundJob(cwd, refreshJobLiveness(cwd, stored));
   });
 
   if (!options.all) {
@@ -1692,12 +1742,23 @@ async function commandStatus(argv) {
 }
 
 async function commandResult(argv) {
-  const { options, positionals } = parseArgs(argv, { booleanOptions: ["json"] });
+  const { options, positionals } = parseArgs(argv, { booleanOptions: ["json"], valueOptions: ['max-chars'] });
   const cwd = resolveWorkspaceRoot(process.cwd());
   const jobId = positionals[0] || null;
   let job = resolveJob(cwd, jobId);
   job = maybeFinalizeBackgroundJob(cwd, readJobFile(cwd, job.id) || job);
-  outputResult(options.json ? job : renderStoredJobResult(job), Boolean(options.json));
+  const body = options.json ? job.resultText || '' : renderStoredJobResult(job);
+  const limited = limitResult(body, options['max-chars'] ?? 20000, {
+    outputFile: path.join(path.dirname(job.resultFile || job.logFile || resolveJobLogFile(cwd, job.id)), job.id + '.output.txt'),
+    artifacts: job.artifacts
+  });
+  if (options.json) {
+    outputResult({ ...job, resultText: limited.text, truncated: limited.truncated, totalChars: limited.totalChars,
+      ...(limited.truncated ? { fullOutputPath: limited.fullOutputPath, artifactPaths: limited.artifactPaths } : {}) }, true);
+  } else {
+    const note = limited.truncated ? `\n\n[truncated: true; totalChars: ${limited.totalChars}]\nArtifacts: ${limited.artifactPaths.join(', ') || '(none)'}\nFull output: ${limited.fullOutputPath}\n` : '';
+    outputResult(limited.text + note, false);
+  }
   process.exitCode = job.status === "completed" ? 0 : job.status === "running" ? 0 : 1;
 }
 
@@ -1715,7 +1776,7 @@ async function commandCancel(argv) {
   }
 
   const pid = job.pid ?? readPidFile(resolveJobPidFile(cwd, job.id));
-  const killed = pid ? terminateProcessTree(pid, "SIGTERM") : false;
+  const killed = pid && isSameProcess(pid, job.pidStartTime) ? terminateProcessTree(pid, "SIGTERM") : false;
   const finishedAt = nowIso();
   const fullJob = {
     ...job,
@@ -1734,6 +1795,9 @@ async function commandCancel(argv) {
   });
   writeJobFile(cwd, fullJob);
 
+  // A live Unix wrapper releases its lock after its child has exited.
+  if (!pid || !isSameProcess(pid, job.pidStartTime)) releaseWorkspaceLock(job.lockFile, job.id);
+
   const payload = { jobId: job.id, cancelled: true, killed, pid };
   outputResult(options.json ? payload : renderCancelReport(job, killed), Boolean(options.json));
 }
@@ -1741,7 +1805,7 @@ async function commandCancel(argv) {
 async function main() {
   const argv = process.argv.slice(2);
   const command = argv[0];
-  const rest = argv.slice(1);
+  let rest = argv.slice(1);
 
   if (!command || command === "-h" || command === "--help" || command === "help") {
     printUsage();
@@ -1749,6 +1813,11 @@ async function main() {
   }
 
   try {
+    const timeout = parseArgs(expandArgv(rest), { valueOptions: ['timeout-minutes'] });
+    if (timeout.options['timeout-minutes'] !== undefined) {
+      requestedTimeout = resolveJobTimeout(timeout.options['timeout-minutes']);
+      rest = timeout.positionals;
+    }
     switch (command) {
       case "setup":
         await commandSetup(rest);

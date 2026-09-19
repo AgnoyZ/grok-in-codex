@@ -14,6 +14,8 @@ export function runCommand(command, args, options = {}) {
     cwd: options.cwd,
     env: options.env ?? process.env,
     input: options.input,
+    timeout: options.timeout,
+    windowsHide: true,
     stdio: options.stdio
   });
 }
@@ -60,11 +62,34 @@ export function isProcessRunning(pid) {
   }
 }
 
+export function getProcessStartTime(pid) {
+  if (!Number.isInteger(pid) || pid <= 0 || process.platform === 'win32') return null;
+  try {
+    if (process.platform === 'linux') {
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+      return stat.slice(stat.lastIndexOf(')') + 2).split(/\s+/)[19];
+    }
+    const result = spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8' });
+    return result.status === 0 ? result.stdout.trim() || null : null;
+  } catch { return null; }
+}
+
+export function isSameProcess(pid, pidStartTime, { alive = isProcessRunning, startTime = getProcessStartTime } = {}) {
+  if (!alive(pid)) return false;
+  if (pidStartTime == null) return true;
+  const current = startTime(pid);
+  // Unknown identity (permissions/platform) is conservatively still alive.
+  return current == null || current === pidStartTime;
+}
+
 export function terminateProcessTree(pid, signal = "SIGTERM") {
   if (!Number.isInteger(pid) || pid <= 0) {
     return false;
   }
 
+  if (process.platform === 'win32') {
+    return spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }).status === 0;
+  }
   try {
     // Negative PID targets the process group when the child was detached.
     process.kill(-pid, signal);

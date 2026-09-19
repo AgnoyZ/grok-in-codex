@@ -32,6 +32,14 @@ function formatLineRange(finding) {
 
 export function renderSetupReport(payload) {
   const lines = ["# Grok setup", ""];
+  if (payload.cleanup) lines.push(`- **Cleaned jobs**: ${payload.cleanup.removed}`);
+  if (payload.artifactExclude) lines.push(`- **Artifact exclude**: ${payload.artifactExclude.path || 'not a Git workspace'}`);
+  if (payload.disallowedTools) {
+    for (const [mode, tools] of Object.entries(payload.disallowedTools)) lines.push(`- **--disallowed-tools (${mode})**: ${tools || '(none)'}`);
+  }
+  if (payload.capabilities) {
+    for (const [flag, support] of Object.entries(payload.capabilities)) lines.push(`- **${flag}**: ${support}`);
+  }
   lines.push(`- **CLI**: ${payload.available ? "found" : "missing"}`);
   if (payload.binary) {
     lines.push(`- **Binary**: \`${payload.binary}\``);
@@ -82,6 +90,7 @@ export function renderSetupReport(payload) {
  * Append usage / postPending / artifacts blocks shared by task + structured review results.
  */
 function appendResultEnrichment(lines, payload) {
+  if (payload.executionMode) lines.push('', `- **Execution mode**: ${payload.executionMode}`);
   if (payload.usage) {
     lines.push("");
     lines.push("## Usage");
@@ -266,6 +275,7 @@ export function renderBackgroundStarted(payload) {
     `- **Title**: ${payload.title || "(untitled)"}`,
     `- **Concurrent jobs**: allowed (multiple Grok processes may run in parallel)`
   ];
+  if (payload.executionMode) lines.push(`- **Execution mode**: ${payload.executionMode}`);
   if (payload.otherRunning?.length) {
     lines.push(`- **Also running**: ${payload.otherRunning.length}`);
     for (const other of payload.otherRunning) {
@@ -443,6 +453,7 @@ export function renderStoredJobResult(job) {
     model: job.model,
     grokSessionId: job.grokSessionId,
     write: job.write,
+    executionMode: job.executionMode,
     text,
     error: job.error || null,
     review: job.review || null,

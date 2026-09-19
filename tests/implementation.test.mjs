@@ -167,8 +167,9 @@ test("grok_implement keeps deep default, check, and resume flags", () => {
   });
 
   assert.equal(invocation.command, "task");
-  assert.deepEqual(invocation.args.slice(0, 5), [
+  assert.deepEqual(invocation.args.slice(0, 6), [
     "task",
+    "--write",
     "--resume-last",
     "--model",
     "deep",

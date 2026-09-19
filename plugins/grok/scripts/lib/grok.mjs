@@ -19,6 +19,12 @@ export const MEDIA_DISALLOWED_TOOLS =
 export const READ_ONLY_TOOLS = "read_file,grep,list_dir";
 export const MEDIA_TOOLS = "image_gen,image_edit,image_to_video,reference_to_video,list_dir,read_file";
 
+export function resolveJobTimeout(value, env = process.env) {
+  const minutes = Number(value ?? env.GROK_JOB_TIMEOUT_MINUTES ?? 60);
+  if (!Number.isFinite(minutes) || minutes < 0) throw new Error('timeoutMinutes must be a finite non-negative number (0 disables the timeout).');
+  return minutes;
+}
+
 export function resolveGrokBinary() {
   const envPath = process.env.GROK_BINARY;
   if (envPath && fs.existsSync(envPath)) {
@@ -543,13 +549,31 @@ export function buildGrokBackgroundWrapperSource({
   logFile = "",
   progressFile = "",
   cwd = process.cwd(),
-  streaming = false
+  streaming = false,
+  lockFile = null,
+  jobId = null,
+  timeoutMinutes = 0
 }) {
   // Embed the same function the module exports (not a hand-maintained copy).
   const streamProgressHelper = getStreamProgressHelperSource();
   return `
+(async () => {
+const { releaseWorkspaceLock } = await import(${JSON.stringify(new URL('./locks.mjs', import.meta.url).href)});
+const { terminateProcessTree } = await import(${JSON.stringify(new URL('./process.mjs', import.meta.url).href)});
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
+const lockFile = ${JSON.stringify(lockFile)};
+const jobId = ${JSON.stringify(jobId)};
+if (lockFile) {
+  // Wait for the launcher to transfer ownership before touching the workspace.
+  let owned = false;
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    try { owned = JSON.parse(fs.readFileSync(lockFile, 'utf8')).pid === process.pid; } catch {}
+    if (owned) break;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  if (!owned) throw new Error('Workspace lock handoff failed');
+}
 const binary = ${JSON.stringify(binary)};
 const args = ${JSON.stringify(args)};
 const resultFile = ${JSON.stringify(resultFile)};
@@ -586,12 +610,37 @@ writeProgress({ phase: "starting", message: "Launching Grok", lines: 0 });
 
 const child = spawn(binary, args, {
   cwd,
+  detached: process.platform !== 'win32',
+  windowsHide: true,
   env: { ...process.env, RUST_LOG: process.env.RUST_LOG || "off" },
   stdio: ["ignore", "pipe", "pipe"]
 });
 
 let stdout = "";
 let stderr = "";
+let timedOut = false;
+let killTimer;
+const stop = () => {
+  terminateProcessTree(child.pid, 'SIGTERM');
+  killTimer = setTimeout(() => terminateProcessTree(child.pid, 'SIGKILL'), 1000);
+  killTimer.unref();
+};
+process.on('SIGTERM', stop);
+process.on('SIGINT', stop);
+const timeoutMs = ${JSON.stringify(timeoutMinutes)} * 60000;
+let deadline;
+const expiresAt = Date.now() + timeoutMs;
+function checkDeadline() {
+  if (Date.now() < expiresAt) {
+    deadline = setTimeout(checkDeadline, Math.min(expiresAt - Date.now(), 2147483647));
+    return;
+  }
+  timedOut = true;
+  stderr += '\\nBackground job timeout after ' + timeoutMs + ' ms';
+  stop();
+}
+if (timeoutMs > 0) deadline = setTimeout(checkDeadline, Math.min(timeoutMs, 2147483647));
+child.on('error', error => { stderr += error.message; });
 let textAcc = "";
 let thoughtAcc = "";
 let sessionId = null;
@@ -705,6 +754,9 @@ child.stderr.on("data", (chunk) => {
   writeProgress(progressState({ message: text.trim().slice(0, 120) }));
 });
 child.on("close", (code, signal) => {
+  if (deadline) clearTimeout(deadline);
+  if (killTimer) clearTimeout(killTimer);
+  if (timedOut) code = 1;
   if (streaming && stdoutBuf.trim()) {
     handleStreamLine(stdoutBuf);
   }
@@ -722,6 +774,7 @@ child.on("close", (code, signal) => {
 
   const payload = {
     exitCode: code,
+    timedOut,
     signal,
     stdout: finalStdout,
     stderr,
@@ -744,8 +797,10 @@ child.on("close", (code, signal) => {
   } catch (error) {
     append("Failed to write result: " + error.message);
   }
+  releaseWorkspaceLock(lockFile, jobId);
   process.exit(code === null ? 1 : code);
 });
+})().catch(error => { console.error(error); process.exitCode = 1; });
 `.trim();
 }
 
@@ -776,15 +831,21 @@ export function spawnGrokBackground(options = {}) {
     logFile: options.logFile || "",
     progressFile: options.progressFile || "",
     cwd: options.cwd || process.cwd(),
-    streaming: useStreaming
+    streaming: useStreaming,
+    lockFile: options.lockFile || null,
+    jobId: options.jobId || null,
+    timeoutMinutes: resolveJobTimeout(options.timeoutMinutes)
   });
 
   const child = spawn(process.execPath, ["-e", wrapper], {
     cwd: options.cwd,
     detached: true,
+    windowsHide: true,
     stdio: "ignore",
     env: process.env
   });
+  child.on('error', () => {}); // Missing pid is reported synchronously below.
+  if (!child.pid) throw new Error('Unable to start background Grok worker');
   child.unref();
   return { pid: child.pid, binary: availability.binary, args };
 }

@@ -1,6 +1,6 @@
 {
   "name": "grok",
-  "version": "0.6.0+codex.20260919034845",
+  "version": "0.7.0",
   "description": "Use Grok from Codex for reviews, rescue, host-led implement, plan, design, workflows, docs, and media.",
   "author": {
     "name": "AgnoyZ",

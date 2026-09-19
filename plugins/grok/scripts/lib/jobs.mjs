@@ -3,14 +3,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { isProcessRunning, readPidFile } from "./process.mjs";
+import { isSameProcess, readPidFile } from "./process.mjs";
+import { releaseWorkspaceLock } from './locks.mjs';
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
 const STATE_VERSION = 3;
 const PLUGIN_DATA_ENV = "CODEX_PLUGIN_DATA";
 const GROK_STATE_ENV = "GROK_CODEX_PLUGIN_STATE";
 const FALLBACK_STATE_ROOT = path.join(os.homedir(), ".grok", "codex-plugin", "state");
-const MAX_JOBS = 50;
+const MAX_JOBS = 200;
 const MAX_TASK_SESSIONS = 20;
 
 /**
@@ -202,9 +203,9 @@ export function loadState(cwd) {
 }
 
 function pruneJobs(jobs) {
-  return [...jobs]
-    .sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")))
-    .slice(0, MAX_JOBS);
+  const sorted = [...jobs].sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')));
+  const retained = new Set(sorted.filter(job => job.status !== 'running').slice(0, MAX_JOBS));
+  return sorted.filter(job => job.status === 'running' || retained.has(job));
 }
 
 function pruneTaskSessions(sessions) {
@@ -408,7 +409,8 @@ export function refreshJobLiveness(cwd, job) {
   }
 
   const pid = job.pid ?? readPidFile(resolveJobPidFile(cwd, job.id));
-  if (pid && isProcessRunning(pid)) {
+  const identity = job.pidStartTime ?? readJobFile(cwd, job.id)?.pidStartTime;
+  if (pid && isSameProcess(pid, identity)) {
     const progress = readJobProgress(cwd, job.id);
     return { ...job, pid, alive: true, progress };
   }
@@ -467,6 +469,7 @@ export function refreshJobLiveness(cwd, job) {
       error: finished.error
     });
     writeJobFile(cwd, finished);
+    releaseWorkspaceLock(job.lockFile || stored?.lockFile, job.id);
     return finished;
   }
 

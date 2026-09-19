@@ -2,9 +2,9 @@
 
 Use [Grok](https://grok.com) from inside Codex for code reviews, delegated coding, planning, multi-agent workflows, design→execute pipelines, PR babysitting, and image/video/document generation.
 
-**Plugin version:** 0.6.0. Codex stays the orchestrator. A thin MCP server + companion script hands real work to Grok on your machine via the local CLI (Grok Build ≥ **0.2.118** recommended).
+**Plugin version:** 0.7.0. Codex stays the orchestrator. A thin MCP server + companion script hands real work to Grok on your machine via the local CLI. Setup checks the historical **0.2.118** version floor and probes advertised CLI capabilities.
 
-Artifact dirs (gitignored): `.grok-plans/`, `.grok-designs/`, `.grok-workflows/`, `.grok-docs/`, `.grok-reviews/`, `.grok-media/`.
+Artifact dirs: `.grok-plans/`, `.grok-designs/`, `.grok-workflows/`, `.grok-docs/`, `.grok-reviews/`, `.grok-media/`. Setup adds `.grok-*/` to the target Git repository's local `info/exclude`, without changing `.gitignore`.
 
 Using Claude Code instead? Use the sibling plugin: [grok-in-claude](https://github.com/stdevMac/grok-in-claude).
 
@@ -13,7 +13,7 @@ Using Claude Code instead? Use the sibling plugin: [grok-in-claude](https://gith
 | Codex MCP tool | Purpose |
 | --- | --- |
 | `grok_setup` | Check CLI + auth + version floor + doctor; toggle stop review gate |
-| `grok_rescue` | Delegate investigation / fixes (write-capable; full control flags) |
+| `grok_rescue` | Delegate investigation / fixes (isolated worktree by default; full control flags) |
 | `grok_implement` | Host-led implement: Codex plans/verifies, Grok implements a host-approved brief |
 | `grok_plan` | Plan mode only (explore → plan.md under `.grok-plans/`) |
 | `grok_review` | Structured read-only review (tree / branch / PR; optional `postPending`) |
@@ -84,6 +84,8 @@ Show Grok job status.
 
 Direct MCP tool examples:
 
+Include `cwd="/path/to/project"` on these calls when using an installed plugin.
+
 ```text
 grok_plan prompt="plan the auth rewrite" background=true
 grok_design prompt="design multi-tenant billing" background=true
@@ -107,6 +109,10 @@ Codex starts an installed plugin MCP server from the plugin cache, so pass the a
 directory as `cwd` when calling a Grok tool from an installed plugin. The companion then runs in
 that directory and keeps jobs, git inspection, and artifacts scoped to the intended workspace.
 
+Write tools reject a missing `cwd` if the MCP server starts inside the plugin installation.
+Nonexistent paths and files are rejected before Grok launches. Read-only tools keep the existing
+fallback to the server's working directory. MCP roots negotiation is not implemented.
+
 For direct local calls, use for example:
 
 ```text
@@ -126,7 +132,7 @@ When Codex should plan and verify while Grok implements (including dual-model im
 
 Do **not** use `grok_plan` or `grok_design` for that host-owned planning phase. Those remain for **Grok-owned** planning.
 
-`grok_implement` maps to companion `task --check`. It defaults `--model deep` only when no `model` or `effort` is supplied. `deep` is an effort preset over the Grok CLI configured model; it does not pin a model id. This tool does not certify host final acceptance.
+`grok_implement` maps to companion `task --write --check`, preserving its direct-write default. It defaults `--model deep` only when no `model` or `effort` is supplied. `deep` is an effort preset over the Grok CLI configured model; it does not pin a model id. This tool does not certify host final acceptance.
 
 ## Depth pipeline
 
@@ -139,10 +145,13 @@ For multi-PR or ambiguous product work where **Grok** owns planning, prefer:
 
 ## Job control semantics
 
-- **Concurrent multi-job support** — no single-job global lock. Prefer `background=true` for long work.
+- **Workspace write locks** — one writer per canonical workspace, including media, documents, design and workflow execution. Other workspaces and read-only jobs can run concurrently. The conflict error names the owning job; finish or cancel it before retrying. Locks coordinate plugin jobs, not edits from your editor or other tools.
 - **Status** — live progress is a tail of accumulated text *and* thought streams; empty/whitespace-only stream tokens floor to `running`.
 - **Result** — plan jobs prefer harvested `plan.md` body over narration; finished jobs persist `config`, `usage`, and `artifacts` (v3 schema).
-- **Reaper** — dead pid + complete parseable `result.json` reconciles to completed; dead pid + empty/truncated/incomplete result → terminal **failed** with distinct diagnostics (no forever-`running` zombies).
+- **Reaper** — PID and process start time must match on Linux/macOS; Windows and legacy jobs fall back to PID checks. A dead process with a complete result is reconciled according to its exit status; missing/truncated results fail with diagnostics.
+- **Timeout** — background jobs default to 60 minutes. `timeoutMinutes` overrides `GROK_JOB_TIMEOUT_MINUTES`; `0` disables it. Timeout terminates the process tree, records a failed result, and preserves partial output. Foreground calls are unaffected. Direct companion calls accept `--timeout-minutes`.
+- **Retention** — setup cleans recorded terminal jobs older than 30 days and keeps at most 200 recent terminal jobs across the state root. Status-list calls also clean, at most once per 24 hours. Running jobs, live lock owners, and project artifacts are preserved. Setup reports the removal count.
+- **Result size** — `grok_result maxChars=20000` bounds the body by default; `0` disables truncation. Truncated output includes `truncated`, `totalChars`, `fullOutputPath`, and available artifact paths. The full output stays on disk. Companion flag: `--max-chars`.
 - **Atomic writes** — background workers write `result.json` via tmp + rename (no partial mid-write; no leftover `.tmp.*` after success).
 - **PR post-pending** — runs on background completion too; skips empty findings; empty/oversize diffs fail closed with recoverable findings under `.grok-reviews/`.
 
@@ -159,6 +168,10 @@ For multi-PR or ambiguous product work where **Grok** owns planning, prefer:
 | `GROK_BINARY` | Override path to the `grok` CLI (also used by tests with a mock binary) |
 | `GROK_CODEX_PLUGIN_STATE` | Explicit job-state root for this plugin |
 | `CODEX_PLUGIN_DATA` | Host plugin data dir; trusted only when basename is `grok` / `grok-*` |
+| `GROK_RESCUE_DEFAULT_WRITE` | Set to `1` to restore direct-write rescue by default; otherwise rescue defaults to a worktree |
+| `GROK_JOB_TIMEOUT_MINUTES` | Background timeout, default `60`; `0` disables; tool parameter takes priority |
+| `GROK_JOB_RETENTION_DAYS` | Terminal-job retention age in days, default `30` |
+| `GROK_JOB_RETENTION_MAX` | Maximum retained terminal jobs, default `200` |
 
 Default state root when unset: `~/.grok/codex-plugin/state/`. Codex does **not** share Claude’s `~/.grok/claude-plugin/state` or `GROK_CLAUDE_PLUGIN_STATE`.
 
@@ -166,9 +179,11 @@ Default state root when unset: `~/.grok/codex-plugin/state/`. Codex does **not**
 
 ### Rescue
 
-- Write-capable by default.
+- **Behavior change in 0.7.0:** defaults to a Grok-managed isolated worktree when both `readOnly` and `worktree` are omitted. The underlying CLI must support `--worktree` and the project must support Git worktrees; failures do not fall back to direct writes.
 - Use `readOnly=true` for investigation-only work.
-- Use `worktree=true` / `check=true` / `bestOfN` for safer or parallel attempts.
+- Explicit `worktree=false` or `readOnly=false` opts into direct writes when no worktree is requested. Explicit `worktree=true` overrides the environment opt-out; `readOnly=true` takes priority over worktree settings. Results report `executionMode` (`direct`, `worktree`, or `readOnly`).
+- Direct companion `task` uses the same default. Use `--write`, `--worktree=false` or `--read-only=false` for direct writes, or `--read-only` to investigate.
+- Use `check=true` / `bestOfN` for verification or multiple attempts within the job.
 - `check=true` appends a verification contract to the prompt (Grok CLI 1.x has no `--check` flag). That is implementer evidence, not host final acceptance.
 - Full control surface available (sandbox, memory, agent, allow/deny, maxTurns, …).
 
@@ -202,6 +217,9 @@ Default state root when unset: `~/.grok/codex-plugin/state/`. Codex does **not**
 
 ## Development
 
+GitHub Actions tests Node 18.18, 20 and 22 on Linux, macOS and Windows. Tests use local mock
+processes and do not require Grok credentials or network access.
+
 ```bash
 npm test
 node plugins/grok/scripts/grok-companion.mjs setup --json
@@ -210,7 +228,36 @@ node plugins/grok/mcp/server.mjs   # stdio NDJSON MCP server
 
 ## Versioning
 
-Root `package.json`, `plugins/grok/.codex-plugin/plugin.json`, and `.agents/plugins/marketplace.json` (metadata + plugin entry) share the same version string. Bump them together.
+Run `npm run version:bump -- 0.7.0` with the intended new version. The script synchronizes root
+`package.json`, the plugin manifest, and marketplace root/plugin-entry versions (and a metadata
+version if present). Tests reject version drift. MCP reports the plugin manifest version.
+Creating a Git tag or GitHub Release remains a maintainer action.
+
+## Compatibility
+
+Setup preserves the historical 0.2.118 version-floor check; a passing version check alone is
+not evidence that every feature is available. It also runs `grok --help` and reports each CLI
+flag as `supported`, `unsupported` (not advertised in recognizable help), or `unknown` (failed
+or unrecognized help). Hidden flags and runtime behavior require separate verification.
+
+The historical 0.2.x/1.x feature mapping is **unverified** for this release. The companion's
+`check` feature injects verification instructions and never passes `--check` to Grok.
+Worktree isolation is delegated to the CLI's `--worktree`; mock tests check argument handling,
+not the behavior of every released Grok version. Setup lists the actual denylist strings for
+read-only and media modes; direct-write, worktree and plan mode do not add that denylist.
+
+## Windows and troubleshooting
+
+- Set `GROK_BINARY` to an absolute path to `grok.exe` if discovery fails. Otherwise `where.exe grok.exe`
+  must find it on the Codex process's `PATH`; the fallback is `%USERPROFILE%\.grok\bin\grok.exe`.
+  Restart Codex after changing `PATH`.
+- **cwd error:** pass your existing project directory explicitly, for example `cwd="D:\\Projects\\app"`.
+- **Lock conflict:** use the owning job ID in `grok_status` or `grok_cancel`, then retry. Dead-owner
+  locks are reclaimed automatically. Concurrent direct writes to the same repository are refused.
+- **Timeout:** inspect the job's partial output/log, then increase `timeoutMinutes` or explicitly
+  set it to `0`. Windows termination uses `taskkill /T /F` to include descendants.
+- **Worktree unsupported/non-Git project:** inspect setup capability output and the CLI error.
+  Explicitly select `readOnly=true` or `worktree=false` according to the intended task.
 
 ## License
 

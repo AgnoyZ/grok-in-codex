@@ -1,6 +1,6 @@
 {
   "name": "grok-in-codex",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Codex plugin for orchestrating Grok Build (rescue, host-led implement, plan, design, workflows, reviews, media, docs)",
   "author": "AgnoyZ",
@@ -9,6 +9,7 @@
     "node": ">=18.18"
   },
   "scripts": {
+    "version:bump": "node scripts/bump-version.mjs",
     "companion": "node plugins/grok/scripts/grok-companion.mjs",
     "mcp": "node plugins/grok/mcp/server.mjs",
     "setup": "node plugins/grok/scripts/grok-companion.mjs setup",

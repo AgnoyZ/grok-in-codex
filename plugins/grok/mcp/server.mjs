@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { buildImplementationPrompt } from "../scripts/lib/implementation.mjs";
 
-const SERVER_VERSION = "0.6.0";
+const SERVER_VERSION = JSON.parse(fs.readFileSync(new URL('../.codex-plugin/plugin.json', import.meta.url), 'utf8')).version;
 const ROOT_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const COMPANION = path.join(ROOT_DIR, "scripts", "grok-companion.mjs");
 
@@ -47,6 +47,7 @@ const CONTROL_PROPERTIES = {
 
 const COMMON_JOB_PROPERTIES = {
   ...WORKSPACE_PROPERTY,
+  timeoutMinutes: { type: 'number', minimum: 0, description: 'Background wall-clock timeout in minutes (default 60; 0 disables).' },
   background: booleanSchema("Start a background job and return the job id."),
   model: stringSchema("Grok model id or effort preset (fast/deep). Omit it to use the Grok CLI configured default model."),
   effort: stringSchema("Reasoning effort: none, minimal, low, medium, high, xhigh, or max."),
@@ -72,7 +73,7 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: "grok_rescue",
-    description: "Delegate investigation, implementation, or fixes to Grok. Write-capable by default.",
+    description: "Delegate investigation, implementation, or fixes to Grok. Uses an isolated worktree by default; readOnly prevents source edits.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -303,6 +304,7 @@ const TOOL_DEFINITIONS = [
         ...WORKSPACE_PROPERTY,
         prompt: stringSchema("Image prompt."),
         background: booleanSchema("Start a background image job and return the job id."),
+        timeoutMinutes: COMMON_JOB_PROPERTIES.timeoutMinutes,
         edit: stringSchema("Path to an image to edit."),
         aspect: stringSchema("Aspect ratio, such as 16:9, 1:1, or 9:16."),
         model: stringSchema("Grok model id or alias."),
@@ -322,6 +324,7 @@ const TOOL_DEFINITIONS = [
         ...WORKSPACE_PROPERTY,
         prompt: stringSchema("Video prompt."),
         background: booleanSchema("Start a background video job and return the job id."),
+        timeoutMinutes: COMMON_JOB_PROPERTIES.timeoutMinutes,
         image: stringSchema("Primary source image path."),
         refs: {
           type: "array",
@@ -360,6 +363,7 @@ const TOOL_DEFINITIONS = [
       properties: {
         ...WORKSPACE_PROPERTY,
         jobId: stringSchema("Specific job id. Omit only when there is one unambiguous recent job."),
+        maxChars: integerSchema('Maximum result body characters (default 20000; 0 disables).', 0),
         json: booleanSchema("Return machine-readable JSON from the companion.")
       }
     }
@@ -399,18 +403,34 @@ function hasValue(value) {
   return value !== undefined && value !== null && value !== "";
 }
 
-export function resolveMcpCwd(input = {}) {
-  const requested = hasValue(input.cwd) ? String(input.cwd) : process.cwd();
+export function requiresWorkspaceWrite(toolName, input = {}) {
+  if (input.dryRun || input.validateOnly) return false;
+  if (toolName === 'grok_rescue') return !input.readOnly && !input.planMode && input.permissionMode !== 'plan';
+  if (toolName === 'grok_babysit') return String(input.action || 'list').toLowerCase() !== 'list';
+  if (toolName === 'grok_workflow') return input.action === 'run';
+  return ['grok_implement', 'grok_execute_plan', 'grok_design', 'grok_document', 'grok_image', 'grok_video'].includes(toolName);
+}
+
+export function isWithinPlugin(cwd, pluginRoot = ROOT_DIR) {
+  const relative = path.relative(path.resolve(pluginRoot), path.resolve(cwd));
+  return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+export function resolveMcpCwd(input = {}, toolName, defaultCwd = process.cwd()) {
+  if (!hasValue(input.cwd) && requiresWorkspaceWrite(toolName, input) && isWithinPlugin(defaultCwd)) {
+    throw new Error('Refusing to write in the plugin installation directory. Pass the project directory as cwd (请传入项目目录作为 cwd).');
+  }
+  const requested = hasValue(input.cwd) ? String(input.cwd) : defaultCwd;
   const cwd = path.resolve(requested);
 
   let stats;
   try {
     stats = fs.statSync(cwd);
   } catch {
-    throw new Error(`Workspace directory does not exist: ${cwd}`);
+    throw new Error(`Workspace directory does not exist: ${cwd}. Pass the project directory as cwd (请传入项目目录作为 cwd).`);
   }
   if (!stats.isDirectory()) {
-    throw new Error(`Workspace path is not a directory: ${cwd}`);
+    throw new Error(`Workspace path is not a directory: ${cwd}. Pass the project directory as cwd (请传入项目目录作为 cwd).`);
   }
   return cwd;
 }
@@ -494,6 +514,7 @@ function appendTaskWorktreeArgs(args, input) {
     pushValue(args, input.worktreeName, "--worktree-name");
   } else {
     pushFlag(args, input.worktree, "--worktree");
+    if (input.worktree === false) args.push('--worktree=false');
   }
   pushValue(args, input.worktreeRef, "--worktree-ref");
 }
@@ -544,6 +565,7 @@ export function buildCompanionInvocation(toolName, input = {}) {
       args.push(command);
       pushFlag(args, input.background, "--background");
       pushFlag(args, input.readOnly, "--read-only");
+      if (input.readOnly === false) args.push('--read-only=false');
       appendTaskResumeArgs(args, input);
       pushValue(args, input.model, "--model");
       pushValue(args, input.effort, "--effort");
@@ -560,6 +582,7 @@ export function buildCompanionInvocation(toolName, input = {}) {
     case "grok_implement": {
       command = "task";
       args.push(command);
+      args.push('--write');
       pushFlag(args, input.background, "--background");
       appendTaskResumeArgs(args, input);
       pushValue(args, resolveImplementModel(input), "--model");
@@ -703,6 +726,7 @@ export function buildCompanionInvocation(toolName, input = {}) {
     case "grok_result":
       command = "result";
       args.push(command);
+      pushValue(args, input.maxChars, '--max-chars');
       pushFlag(args, input.json, "--json");
       if (hasValue(input.jobId)) {
         args.push(String(input.jobId));
@@ -724,12 +748,13 @@ export function buildCompanionInvocation(toolName, input = {}) {
       break;
   }
 
+  if (hasValue(input.timeoutMinutes)) args.splice(1, 0, '--timeout-minutes', String(input.timeoutMinutes));
   return { command, args };
 }
 
 export function runCompanion(toolName, input = {}) {
   const { args } = buildCompanionInvocation(toolName, input);
-  const cwd = resolveMcpCwd(input);
+  const cwd = resolveMcpCwd(input, toolName);
 
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [COMPANION, ...args], {

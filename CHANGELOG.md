@@ -1,5 +1,29 @@
 # Changelog
 
+This changelog follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [0.7.0] - 2026-09-19
+
+### Added
+- Node 18.18/20/22 CI on Linux, macOS and Windows (T1).
+- `npm run version:bump -- <version>` and version consistency tests (T2).
+- Atomic workspace write locks with stale-owner recovery and background ownership handoff (T4).
+- PID start-time identity on Linux/macOS, retaining legacy/Windows PID fallback (T6).
+- Terminal-job cleanup, 30-day/200-job defaults, configurable retention and daily status throttling (T7).
+- Background `timeoutMinutes` / `GROK_JOB_TIMEOUT_MINUTES`, default 60 minutes; partial results survive timeout (T8).
+- Result `maxChars`, default 20000, with full-output and artifact paths when truncated (T9).
+- Setup CLI help capability report and exact per-mode `--disallowed-tools` values (T11).
+
+### Changed
+- **Behavior change (T5):** rescue defaults to an isolated worktree unless `readOnly` or `worktree` is explicitly supplied. `GROK_RESCUE_DEFAULT_WRITE=1` restores the old default. Results expose the execution mode. Explicit read-only mode takes priority.
+- Write tools reject implicit plugin-installation cwd; path errors include repair guidance (T3).
+- Setup adds `.grok-*/` to the repository-local Git exclude file idempotently (T10).
+- MCP version follows the plugin manifest; documented new settings and Windows troubleshooting (T12).
+
+### Fixed
+- Windows process-tree termination includes descendants.
+- Running job index entries are no longer discarded by the completed-history limit.
+
 ## 0.6.0
 
 ### Added
