@@ -2,7 +2,7 @@
 
 Use [Grok](https://grok.com) from inside Codex for code reviews, delegated coding, planning, multi-agent workflows, design→execute pipelines, PR babysitting, and image/video/document generation.
 
-**Plugin version:** 0.7.0. Codex stays the orchestrator. A thin MCP server + companion script hands real work to Grok on your machine via the local CLI. Setup checks the historical **0.2.118** version floor and probes advertised CLI capabilities.
+**Plugin version:** 0.8.0. Codex stays the orchestrator. A thin MCP server + companion script hands real work to Grok on your machine via the local CLI. Setup checks the historical **0.2.118** version floor and probes advertised CLI capabilities.
 
 Artifact dirs: `.grok-plans/`, `.grok-designs/`, `.grok-workflows/`, `.grok-docs/`, `.grok-reviews/`, `.grok-media/`. Setup adds `.grok-*/` to the target Git repository's local `info/exclude`, without changing `.gitignore`.
 
@@ -23,17 +23,32 @@ Using Claude Code instead? Use the sibling plugin: [grok-in-claude](https://gith
 | `grok_execute_plan` | Execute a design-doc PR Plan DAG |
 | `grok_babysit` | Watch PRs / fix CI & review comments (`list` is read-only) |
 | `grok_document` | Generate docx / pdf / pptx → `.grok-docs/` |
-| `grok_image` | Generate or edit images → `.grok-media/image/` |
-| `grok_video` | Generate short videos → `.grok-media/video/` |
+| `grok_media` | `kind=image` or `kind=video` → `.grok-media/` |
 | `grok_sessions` | List / search / export Grok sessions |
 | `grok_transfer` | Build context-transfer guidance for Grok |
-| `grok_status` | Jobs + live progress / log tail + usage when available |
-| `grok_result` | Final output (plan.md preferred for plan jobs; usage + artifacts) |
-| `grok_cancel` | Cancel a background job |
+| `grok_job` | `action=status` (default), `result`, or `cancel`; cancellation requires `jobId` |
+| `grok_artifacts` | Read-only artifact discovery or migration preview with path conflicts |
 
 **Control flags** (rescue/implement/plan/review and long-running jobs): `sandbox`, `planMode` / `permissionMode`, `agent`, `noSubagents`, `memory` / `noMemory`, `allow` / `deny`, `disableWebSearch`, `forkSession`, `maxTurns`.
 
 Skills: brand/media recipes, routing (host-led implement vs Grok-owned plan/design), runtime contracts, workflows, prompting, orchestrated coding.
+
+### Breaking MCP change in 0.8.0
+
+The five old MCP names are removed, with no aliases or compatibility layer:
+
+| Removed tool | Replacement |
+| --- | --- |
+| `grok_status` | `grok_job action=status` |
+| `grok_result` | `grok_job action=result` |
+| `grok_cancel` | `grok_job action=cancel jobId="..."` |
+| `grok_image` | `grok_media kind=image` |
+| `grok_video` | `grok_media kind=video` |
+
+The companion's underlying CLI commands and result formats are unchanged. `grok_job` accepts
+`all` only for status and `maxChars` only for result. `grok_media` requires a kind; image editing
+uses `edit`, while video uses `image`, `refs`, and `duration`. Inapplicable options return errors.
+Update external MCP callers and start a new Codex task after installing this version.
 
 ## Requirements
 
@@ -97,10 +112,10 @@ grok_implement implementationBrief="Add full jitter to src/retry.ts per the host
 grok_babysit action=list
 grok_document type=pdf prompt="one-pager for the launch"
 grok_sessions action=list
-grok_status
-grok_result jobId="plan-abc123"
-grok_image aspect="16:9" prompt="Dark developer-tool launch banner"
-grok_video image="./.grok-media/image/hero.png" duration="6" prompt="gentle camera push-in"
+grok_job action=status
+grok_job action=result jobId="plan-abc123"
+grok_media kind=image aspect="16:9" prompt="Dark developer-tool launch banner"
+grok_media kind=video image="./.grok-media/image/hero.png" duration="6" prompt="gentle camera push-in"
 ```
 
 ### Workspace selection
@@ -117,7 +132,7 @@ For direct local calls, use for example:
 
 ```text
 grok_review cwd="/path/to/project" base=main
-grok_status cwd="/path/to/project" json=true
+grok_job action=status cwd="/path/to/project" json=true
 ```
 
 ## Host-led implementation
@@ -151,7 +166,7 @@ For multi-PR or ambiguous product work where **Grok** owns planning, prefer:
 - **Reaper** — PID and process start time must match on Linux/macOS; Windows and legacy jobs fall back to PID checks. A dead process with a complete result is reconciled according to its exit status; missing/truncated results fail with diagnostics.
 - **Timeout** — background jobs default to 60 minutes. `timeoutMinutes` overrides `GROK_JOB_TIMEOUT_MINUTES`; `0` disables it. Timeout terminates the process tree, records a failed result, and preserves partial output. Foreground calls are unaffected. Direct companion calls accept `--timeout-minutes`.
 - **Retention** — setup cleans recorded terminal jobs older than 30 days and keeps at most 200 recent terminal jobs across the state root. Status-list calls also clean, at most once per 24 hours. Running jobs, live lock owners, and project artifacts are preserved. Setup reports the removal count.
-- **Result size** — `grok_result maxChars=20000` bounds the body by default; `0` disables truncation. Truncated output includes `truncated`, `totalChars`, `fullOutputPath`, and available artifact paths. The full output stays on disk. Companion flag: `--max-chars`.
+- **Result size** — `grok_job action=result maxChars=20000` bounds the body by default; `0` disables truncation. Truncated output includes `truncated`, `totalChars`, `fullOutputPath`, and available artifact paths. The full output stays on disk. Companion flag: `--max-chars`.
 - **Atomic writes** — background workers write `result.json` via tmp + rename (no partial mid-write; no leftover `.tmp.*` after success).
 - **PR post-pending** — runs on background completion too; skips empty findings; empty/oversize diffs fail closed with recoverable findings under `.grok-reviews/`.
 
@@ -213,7 +228,28 @@ Default state root when unset: `~/.grok/codex-plugin/state/`. Codex does **not**
 ### Jobs
 
 - Background tools return a job id.
-- Use `grok_status` / `grok_result` / `grok_cancel` with that id when multiple jobs are active.
+- Use `grok_job action=status` / `grok_job action=result` / `grok_job action=cancel` with that id when multiple jobs are active.
+
+### Artifact discovery and migration preview
+
+```text
+grok_artifacts cwd="/path/to/project" action=discover json=true
+grok_artifacts cwd="/path/to/project" action=preview maxEntries=10000 json=true
+```
+
+The equivalent CLI is `node plugins/grok/scripts/grok-companion.mjs artifacts preview --cwd /path/to/project --json`.
+Discovery inventories known artifact directories in both layouts. Preview maps legacy files
+to `.grok/plans/`, `.grok/designs/`, `.grok/workflows/`, `.grok/docs/`, `.grok/reviews/`, and
+`.grok/media/`, preserving nested paths. Existing targets are conflicts even when their contents
+might match. Symlinks and junctions are never followed; blocked parents and unreadable paths
+are reported. Scans are capped at 10000 entries by default (configurable up to 100000) and 32
+levels; `complete=false` and warnings indicate an incomplete inventory.
+
+Both actions are read-only: no Grok invocation, job creation, directory creation, copies, moves,
+Git-ignore updates, or reference rewrites. Generation still writes to the existing directories.
+Custom output locations and session/state files are outside this inventory. Preview is a
+point-in-time proposal, not a migration approval or executable plan. See the
+[migration design](docs/artifact-migration.md) for reference handling and rollback requirements.
 
 ## Development
 
@@ -228,7 +264,7 @@ node plugins/grok/mcp/server.mjs   # stdio NDJSON MCP server
 
 ## Versioning
 
-Run `npm run version:bump -- 0.7.0` with the intended new version. The script synchronizes root
+Run `npm run version:bump -- 0.8.0` with the intended new version. The script synchronizes root
 `package.json`, the plugin manifest, and marketplace root/plugin-entry versions (and a metadata
 version if present). Tests reject version drift. MCP reports the plugin manifest version.
 Creating a Git tag or GitHub Release remains a maintainer action.
@@ -252,7 +288,7 @@ read-only and media modes; direct-write, worktree and plan mode do not add that 
   must find it on the Codex process's `PATH`; the fallback is `%USERPROFILE%\.grok\bin\grok.exe`.
   Restart Codex after changing `PATH`.
 - **cwd error:** pass your existing project directory explicitly, for example `cwd="D:\\Projects\\app"`.
-- **Lock conflict:** use the owning job ID in `grok_status` or `grok_cancel`, then retry. Dead-owner
+- **Lock conflict:** use the owning job ID in `grok_job action=status` or `grok_job action=cancel`, then retry. Dead-owner
   locks are reclaimed automatically. Concurrent direct writes to the same repository are refused.
 - **Timeout:** inspect the job's partial output/log, then increase `timeoutMinutes` or explicitly
   set it to `0`. Windows termination uses `taskkill /T /F` to include descendants.

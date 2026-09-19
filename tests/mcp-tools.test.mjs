@@ -22,22 +22,20 @@ const SERVER_PATH = path.resolve(
 
 const EXPECTED_TOOLS = [
   "grok_adversarial_review",
+  "grok_artifacts",
   "grok_babysit",
-  "grok_cancel",
   "grok_design",
   "grok_document",
   "grok_execute_plan",
-  "grok_image",
   "grok_implement",
+  "grok_job",
+  "grok_media",
   "grok_plan",
   "grok_rescue",
-  "grok_result",
   "grok_review",
   "grok_sessions",
   "grok_setup",
-  "grok_status",
   "grok_transfer",
-  "grok_video",
   "grok_workflow"
 ];
 
@@ -69,7 +67,7 @@ test("every MCP tool accepts an explicit workspace cwd", () => {
 
 test("MCP companion calls run in the requested workspace", async () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "grok-mcp-workspace-"));
-  const response = await runCompanion("grok_status", { cwd: workspace, json: true });
+  const response = await runCompanion("grok_job", { cwd: workspace, action: 'status', json: true });
   const payload = JSON.parse(response.content[0].text);
 
   assert.equal(response.isError, false);
@@ -415,7 +413,7 @@ test("stdio MCP transport speaks NDJSON (Codex framing)", async () => {
     id: 3,
     method: "tools/call",
     params: {
-      name: "grok_status",
+      name: "grok_job",
       arguments: { cwd: workspace, json: true }
     }
   });

@@ -2,6 +2,20 @@
 
 This changelog follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0] - 2026-09-19
+
+### Added
+- `grok_job` with status/result/cancel actions and `grok_media` with image/video kinds, sharing the existing companion execution paths.
+- Read-only `grok_artifacts` discovery and migration previews for legacy and proposed `.grok/` artifact directories, including conflict detection and bounded scans.
+- Artifact migration design covering path references, future reader changes, copy verification and rollback; migration execution is not implemented.
+
+### Changed
+- **Breaking:** removed MCP tools `grok_status`, `grok_result`, `grok_cancel`, `grok_image`, and `grok_video`; no compatibility aliases remain. Updated skills and caller examples.
+- Unified tools reject invalid actions, missing cancellation job IDs, missing media kinds and inapplicable options.
+
+### Unchanged
+- Companion CLI commands, job/result formats and existing artifact generation paths. Discovery and preview do not move artifacts or rewrite references.
+
 ## [0.7.0] - 2026-09-19
 
 ### Added

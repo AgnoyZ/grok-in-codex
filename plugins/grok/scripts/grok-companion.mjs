@@ -15,6 +15,7 @@ import { resolveJobTimeout } from './lib/grok.mjs';
 import { cleanupJobs, excludeGrokArtifacts } from './lib/maintenance.mjs';
 import { limitResult } from './lib/result-limit.mjs';
 import { probeCapabilities } from './lib/capabilities.mjs';
+import { discoverArtifacts, previewArtifactMigration, renderArtifactDiscovery } from './lib/artifact-discovery.mjs';
 import { READ_ONLY_DISALLOWED_TOOLS, MEDIA_DISALLOWED_TOOLS } from './lib/grok.mjs';
 import {
   collectDesignArtifacts,
@@ -140,6 +141,7 @@ function printUsage() {
       "  transfer [--source <claude-transcript.jsonl>] [--json]",
       "  stop-gate-review [--json]",
       "  status [job-id] [--all] [--json]",
+      "  artifacts discover|preview [--cwd <path>] [--max-entries N] [--json] (read-only)",
       "  result [job-id] [--json]",
       "  cancel [job-id] [--json]"
     ].join("\n")
@@ -1802,6 +1804,20 @@ async function commandCancel(argv) {
   outputResult(options.json ? payload : renderCancelReport(job, killed), Boolean(options.json));
 }
 
+async function commandArtifacts(argv) {
+  const { options, positionals } = parseArgs(expandArgv(argv), {
+    booleanOptions: ['json'], valueOptions: ['cwd', 'max-entries']
+  });
+  const action = positionals[0] || 'discover';
+  if (!['discover', 'preview'].includes(action) || positionals.length > 1) {
+    throw new Error('Use artifacts discover|preview [--cwd <path>] [--max-entries N] [--json]. Migration execution is not supported.');
+  }
+  const cwd = resolveWorkspaceRoot(options.cwd || process.cwd());
+  const scanOptions = { maxEntries: options['max-entries'] ?? 10000 };
+  const report = action === 'preview' ? previewArtifactMigration(cwd, scanOptions) : discoverArtifacts(cwd, scanOptions);
+  outputResult(options.json ? report : renderArtifactDiscovery(report), Boolean(options.json));
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const command = argv[0];
@@ -1819,6 +1835,9 @@ async function main() {
       rest = timeout.positionals;
     }
     switch (command) {
+      case 'artifacts':
+        await commandArtifacts(rest);
+        break;
       case "setup":
         await commandSetup(rest);
         break;

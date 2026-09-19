@@ -51,16 +51,17 @@ test('T2 bump repairs version drift and rejects invalid versions without mutatio
 });
 test('T3 missing cwd in plugin is refused for every write tool; read-only calls retain fallback', t => {
   const cwd = temp(t);
-  for (const name of ['grok_rescue', 'grok_implement', 'grok_execute_plan', 'grok_document', 'grok_image', 'grok_video', 'grok_babysit']) {
-    assert.throws(() => resolveMcpCwd({ action: 'check' }, name, plugin), /project directory as cwd/);
-    assert.equal(resolveMcpCwd({ cwd }, name, plugin), cwd);
+  for (const name of ['grok_rescue', 'grok_implement', 'grok_execute_plan', 'grok_document', 'grok_media', 'grok_babysit']) {
+    const options = name === 'grok_media' ? { kind: 'image' } : { action: 'check' };
+    assert.throws(() => resolveMcpCwd(options, name, plugin), /project directory as cwd/);
+    assert.equal(resolveMcpCwd({ ...options, cwd }, name, plugin), cwd);
   }
   for (const [name, input] of [['grok_review', {}], ['grok_rescue', { readOnly: true }], ['grok_babysit', { action: 'list' }], ['grok_execute_plan', { dryRun: true }]]) {
     assert.equal(resolveMcpCwd(input, name, plugin), plugin);
     assert.equal(requiresWorkspaceWrite(name, input), false);
   }
-  assert.throws(() => resolveMcpCwd({ cwd: path.join(cwd, 'missing') }, 'grok_image'), /does not exist/);
-  assert.throws(() => resolveMcpCwd({ cwd: path.join(root, 'package.json') }, 'grok_image'), /not a directory/);
+  assert.throws(() => resolveMcpCwd({ kind: 'image', cwd: path.join(cwd, 'missing') }, 'grok_media'), /does not exist/);
+  assert.throws(() => resolveMcpCwd({ kind: 'image', cwd: path.join(root, 'package.json') }, 'grok_media'), /not a directory/);
 });
 test('T4 same workspace rejects a second writer; separate workspace and read-only calls coexist', t => {
   const dir = temp(t);
@@ -152,7 +153,7 @@ test('T8 timeout precedence, zero and schema forwarding', () => {
   for (const tool of listToolDefinitions().filter(t => t.inputSchema.properties.background)) {
     assert.ok(tool.inputSchema.properties.timeoutMinutes, tool.name);
   }
-  assert.ok(buildCompanionInvocation('grok_image', { prompt: 'x', timeoutMinutes: 0 }).args.includes('--timeout-minutes'));
+  assert.ok(buildCompanionInvocation('grok_media', { kind: 'image', prompt: 'x', timeoutMinutes: 0 }).args.includes('--timeout-minutes'));
 });
 test('T8 mock hanging background process times out, retains partial output, releases write lock and reconciles failed', { timeout: 15000 }, async t => {
   const dir = temp(t), state = path.join(dir, 'state');

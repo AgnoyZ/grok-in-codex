@@ -295,90 +295,55 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
-    name: "grok_image",
-    description: "Generate or edit an image with Grok and store artifacts under .grok-media/image by default.",
+    name: "grok_media",
+    description: "Generate or edit images, or generate videos. Pass kind=image or kind=video. Artifacts use .grok-media/.",
     inputSchema: {
-      type: "object",
-      additionalProperties: false,
+      type: "object", additionalProperties: false, required: ["kind"],
       properties: {
         ...WORKSPACE_PROPERTY,
-        prompt: stringSchema("Image prompt."),
-        background: booleanSchema("Start a background image job and return the job id."),
+        kind: { type: "string", enum: ["image", "video"], description: "Media kind." },
+        prompt: stringSchema("Media generation or editing prompt."),
+        background: booleanSchema("Start a background job."),
         timeoutMinutes: COMMON_JOB_PROPERTIES.timeoutMinutes,
-        edit: stringSchema("Path to an image to edit."),
-        aspect: stringSchema("Aspect ratio, such as 16:9, 1:1, or 9:16."),
+        edit: stringSchema("Image input for kind=image editing."),
+        image: stringSchema("Primary source image for kind=video."),
+        refs: { type: "array", items: { type: "string" }, description: "Additional reference images for kind=video." },
+        duration: stringSchema("Video duration, commonly 6 or 10."),
+        aspect: stringSchema("Aspect ratio, such as 16:9 or 1:1."),
         model: stringSchema("Grok model id or alias."),
         effort: stringSchema("Reasoning effort."),
         out: stringSchema("Output directory, relative to the workspace or absolute."),
-        json: booleanSchema("Return machine-readable JSON from the companion.")
+        json: booleanSchema("Return machine-readable JSON.")
       }
     }
   },
   {
-    name: "grok_video",
-    description: "Generate a short video with Grok and store artifacts under .grok-media/video by default.",
+    name: "grok_job",
+    description: "Inspect job status, read results, or cancel a background job. action=cancel requires an explicit jobId.",
     inputSchema: {
-      type: "object",
-      additionalProperties: false,
+      type: "object", additionalProperties: false,
       properties: {
         ...WORKSPACE_PROPERTY,
-        prompt: stringSchema("Video prompt."),
-        background: booleanSchema("Start a background video job and return the job id."),
-        timeoutMinutes: COMMON_JOB_PROPERTIES.timeoutMinutes,
-        image: stringSchema("Primary source image path."),
-        refs: {
-          type: "array",
-          items: { type: "string" },
-          description: "Additional reference image paths."
-        },
-        duration: stringSchema("Video duration supported by Grok, commonly 6 or 10."),
-        aspect: stringSchema("Aspect ratio, such as 16:9, 1:1, or 9:16."),
-        model: stringSchema("Grok model id or alias."),
-        effort: stringSchema("Reasoning effort."),
-        out: stringSchema("Output directory, relative to the workspace or absolute."),
-        json: booleanSchema("Return machine-readable JSON from the companion.")
-      }
+        action: { type: "string", enum: ["status", "result", "cancel"], default: "status", description: "Job operation." },
+        jobId: stringSchema("Job id; required for cancellation."),
+        all: booleanSchema("Include older jobs for action=status."),
+        maxChars: integerSchema("Result body character limit for action=result (default 20000; 0 disables).", 0),
+        json: booleanSchema("Return machine-readable JSON.")
+      },
+      allOf: [{ if: { properties: { action: { const: "cancel" } }, required: ["action"] }, then: { required: ["jobId"] } }]
     }
   },
   {
-    name: "grok_status",
-    description: "Show active and recent Grok jobs, live progress, and usage when available.",
+    name: "grok_artifacts",
+    description: "Read-only discovery of legacy and proposed unified artifact directories, or a migration preview with path conflicts. Never moves files or changes output paths.",
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     inputSchema: {
-      type: "object",
-      additionalProperties: false,
+      type: "object", additionalProperties: false,
       properties: {
         ...WORKSPACE_PROPERTY,
-        jobId: stringSchema("Specific job id to inspect."),
-        all: booleanSchema("Include older jobs, not only the recent default window."),
-        json: booleanSchema("Return machine-readable JSON from the companion.")
-      }
-    }
-  },
-  {
-    name: "grok_result",
-    description: "Read the stored result for a completed Grok job (plan body preferred for plan jobs).",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        ...WORKSPACE_PROPERTY,
-        jobId: stringSchema("Specific job id. Omit only when there is one unambiguous recent job."),
-        maxChars: integerSchema('Maximum result body characters (default 20000; 0 disables).', 0),
-        json: booleanSchema("Return machine-readable JSON from the companion.")
-      }
-    }
-  },
-  {
-    name: "grok_cancel",
-    description: "Cancel a running Grok background job.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["jobId"],
-      properties: {
-        ...WORKSPACE_PROPERTY,
-        jobId: stringSchema("Job id to cancel."),
-        json: booleanSchema("Return machine-readable JSON from the companion.")
+        action: { type: "string", enum: ["discover", "preview"], default: "discover", description: "Discover artifacts or preview legacy-to-.grok path mappings." },
+        maxEntries: { type: "integer", minimum: 1, maximum: 100000, description: "Maximum scanned entries including directories (default 10000). Incomplete scans are reported." },
+        json: booleanSchema("Return machine-readable discovery or migration preview.")
       }
     }
   },
@@ -399,16 +364,40 @@ const TOOL_DEFINITIONS = [
 
 const TOOL_MAP = new Map(TOOL_DEFINITIONS.map((tool) => [tool.name, tool]));
 
+export function resolveUnifiedTool(toolName, input = {}) {
+  if (['grok_job', 'grok_media', 'grok_artifacts'].includes(toolName)) {
+    const properties = TOOL_MAP.get(toolName).inputSchema.properties;
+    for (const key of Object.keys(input)) {
+      if (!Object.hasOwn(properties, key)) throw new Error(`Unknown ${toolName} option: ${key}`);
+    }
+  }
+  if (toolName === 'grok_job') {
+    const action = input.action ?? 'status';
+    if (!['status', 'result', 'cancel'].includes(action)) throw new Error('grok_job action must be status, result or cancel');
+    if (action === 'cancel' && (typeof input.jobId !== 'string' || !input.jobId.trim())) throw new Error('grok_job cancel requires an explicit jobId');
+    if (input.all !== undefined && action !== 'status') throw new Error('all is only supported for grok_job status');
+    if (input.maxChars !== undefined && action !== 'result') throw new Error('maxChars is only supported for grok_job result');
+  } else if (toolName === 'grok_media') {
+    if (!['image', 'video'].includes(input.kind)) throw new Error('grok_media kind must be image or video');
+    const unsupported = input.kind === 'image' ? ['image', 'refs', 'duration'] : ['edit'];
+    for (const key of unsupported) {
+      if (input[key] !== undefined) throw new Error(`${key} is not supported for grok_media ${input.kind}`);
+    }
+  }
+  return { toolName, input };
+}
+
 function hasValue(value) {
   return value !== undefined && value !== null && value !== "";
 }
 
 export function requiresWorkspaceWrite(toolName, input = {}) {
+  ({ toolName, input } = resolveUnifiedTool(toolName, input));
   if (input.dryRun || input.validateOnly) return false;
   if (toolName === 'grok_rescue') return !input.readOnly && !input.planMode && input.permissionMode !== 'plan';
   if (toolName === 'grok_babysit') return String(input.action || 'list').toLowerCase() !== 'list';
   if (toolName === 'grok_workflow') return input.action === 'run';
-  return ['grok_implement', 'grok_execute_plan', 'grok_design', 'grok_document', 'grok_image', 'grok_video'].includes(toolName);
+  return ['grok_implement', 'grok_execute_plan', 'grok_design', 'grok_document', 'grok_media'].includes(toolName);
 }
 
 export function isWithinPlugin(cwd, pluginRoot = ROOT_DIR) {
@@ -545,6 +534,7 @@ export function listToolDefinitions() {
 }
 
 export function buildCompanionInvocation(toolName, input = {}) {
+  ({ toolName, input } = resolveUnifiedTool(toolName, input));
   if (!TOOL_MAP.has(toolName)) {
     throw new Error(`Unknown Grok tool: ${toolName}`);
   }
@@ -553,6 +543,18 @@ export function buildCompanionInvocation(toolName, input = {}) {
   let command;
 
   switch (toolName) {
+    case 'grok_artifacts': {
+      const action = input.action ?? 'discover';
+      if (!['discover', 'preview'].includes(action)) throw new Error('grok_artifacts action must be discover or preview; migration execution is not supported');
+      for (const key of Object.keys(input)) {
+        if (!Object.hasOwn(TOOL_MAP.get(toolName).inputSchema.properties, key)) throw new Error(`Unknown artifact option: ${key}`);
+      }
+      command = 'artifacts';
+      args.push(command, action);
+      pushValue(args, input.maxEntries, '--max-entries');
+      pushFlag(args, input.json, '--json');
+      break;
+    }
     case "grok_setup":
       command = "setup";
       args.push(command);
@@ -704,37 +706,16 @@ export function buildCompanionInvocation(toolName, input = {}) {
       pushFlag(args, input.json, "--json");
       break;
     }
-    case "grok_image":
-      command = "image";
+    case "grok_media":
+      command = input.kind;
       args.push(command);
-      appendMediaArgs(args, input, "image");
+      appendMediaArgs(args, input, command);
       break;
-    case "grok_video":
-      command = "video";
+    case "grok_job":
+      command = input.action ?? 'status';
       args.push(command);
-      appendMediaArgs(args, input, "video");
-      break;
-    case "grok_status":
-      command = "status";
-      args.push(command);
-      pushFlag(args, input.all, "--all");
-      pushFlag(args, input.json, "--json");
-      if (hasValue(input.jobId)) {
-        args.push(String(input.jobId));
-      }
-      break;
-    case "grok_result":
-      command = "result";
-      args.push(command);
-      pushValue(args, input.maxChars, '--max-chars');
-      pushFlag(args, input.json, "--json");
-      if (hasValue(input.jobId)) {
-        args.push(String(input.jobId));
-      }
-      break;
-    case "grok_cancel":
-      command = "cancel";
-      args.push(command);
+      if (command === 'status') pushFlag(args, input.all, '--all');
+      if (command === 'result') pushValue(args, input.maxChars, '--max-chars');
       pushFlag(args, input.json, "--json");
       if (hasValue(input.jobId)) {
         args.push(String(input.jobId));

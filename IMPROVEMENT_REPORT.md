@@ -1,5 +1,16 @@
 # 插件改进交付报告
 
+## 0.8.0 后续改进（2026-09-19）
+
+- 按用户最新要求，不保留旧 MCP 接口兼容：移除 `grok_status/result/cancel`、`grok_image/video`，由 `grok_job` 和 `grok_media` 直接替代。旧名称不再列出，调用时返回未知工具错误。
+- 新增 `grok_artifacts action=discover|preview`：只读发现旧布局与拟议 `.grok/` 布局的产物，保留层级并报告迁移目标冲突、链接路径和不完整扫描。没有实际迁移或写入操作。
+- 迁移设计见 [docs/artifact-migration.md](docs/artifact-migration.md)，涵盖路径引用、生产端切换、复制校验和回滚要求。现有产物输出路径继续使用旧布局。
+- 同步更新工具测试、README、CHANGELOG 和四个 skills 中的调用示例；统一版本为 0.8.0。
+- 验证：162/162 测试通过，0 跳过，约 7.44 秒；插件结构验证与 diff 空白检查通过。首次回归中一个原有测试在 Windows 临时目录清理时出现 `ENOTEMPTY`，未修改或跳过该测试，完整重跑通过。
+- skills 通用校验器：使用 UTF-8 后仍不接受仓库原有的 `user-invocable` frontmatter 字段；该字段并非本次引入，保留既有调用策略，因此不能声称通用 skills 校验通过。
+
+以下为 0.7.0 的历史交付记录。
+
 日期：2026-09-19。目标版本：0.7.0。
 
 ## Phase 0：修改前核查

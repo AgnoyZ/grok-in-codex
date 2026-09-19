@@ -108,12 +108,19 @@ MCP input keys map to companion flags:
 - `grok_document` — `type=pptx|pdf|docx`
 - `grok_sessions` — `action=list|search|export`
 
-## Media (`grok_image` / `grok_video`)
+## Media (`grok_media kind=image` / `grok_media kind=video`)
 
 - Artifacts under `.grok-media/image/` and `.grok-media/video/`
 
 ## Jobs
 
-- `grok_status` / `grok_result` / `grok_cancel`
+- `grok_job action=status` / `grok_job action=result` / `grok_job action=cancel`
 - Status shows accumulated stream progress (text + thought tails); whitespace-only stays `running`
 - Result includes usage and artifacts when present
+
+## Artifact inventory
+
+- `grok_artifacts action=discover` lists known legacy and proposed unified artifact paths.
+- `grok_artifacts action=preview` reports source/target mappings and conflicts for a possible `.grok/` layout.
+- Both calls are read-only. Inspect `complete`, `warnings`, and conflicts before discussing migration; no apply/move action exists.
+- Existing artifact output directories remain active. Never treat a preview as permission to move files or rewrite user references.

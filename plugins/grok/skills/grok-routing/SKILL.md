@@ -17,7 +17,7 @@ user-invocable: false
 - **Multi-PR delivery from a design doc** → `grok_execute_plan`
 - **Named multi-agent recipes** → `grok_workflow`
 - **PR CI/review babysitting** → `grok_babysit`
-- Image/video generation (`grok_image`, `grok_video`)
+- Image/video generation (`grok_media kind=image`, `grok_media kind=video`)
 - Documents (`grok_document` with `type` pdf|docx|pptx)
 - Structured or adversarial code review before shipping
 - Long-running investigation better as a background job
@@ -42,7 +42,7 @@ user-invocable: false
 | Challenge design assumptions | `grok_adversarial_review` |
 | Watch / fix open PRs | `grok_babysit` |
 | Deck / PDF / Word | `grok_document` |
-| Brand stills / clips | `grok_image` / `grok_video` |
+| Brand stills / clips | `grok_media kind=image` / `grok_media kind=video` |
 | Find past Grok work | `grok_sessions` |
 
 ## Host-led vs Grok-owned planning
@@ -87,15 +87,15 @@ When workstreams are independent, **run multiple Grok jobs at once**:
 | Review | `grok_review` |
 | Babysit | `grok_babysit` |
 | Document | `grok_document` |
-| Image / video | `grok_image` / `grok_video` |
+| Image / video | `grok_media kind=image` / `grok_media kind=video` |
 
 How:
 
 1. Split into independent prompts.
 2. For concurrent writers, assign non-overlapping `allowedFiles` and set `parallelWrite=true`, or give each writer its own worktree.
 3. Start each MCP tool with `background=true` when it may take time.
-4. Track each job id via `grok_status`.
-5. Collect results with `grok_result` and do not finish while a required job is active.
+4. Track each job id via `grok_job action=status`.
+5. Collect results with `grok_job action=result` and do not finish while a required job is active.
 
 Do **not** serialize independent Grok work just because another job is running.
 Do **not** run concurrent writers against overlapping files or an ambiguous shared scope.
@@ -115,10 +115,10 @@ Do **not** run concurrent writers against overlapping files or an ambiguous shar
 | Challenge design | `grok_adversarial_review` |
 | Babysit PRs | `grok_babysit` |
 | Document | `grok_document` |
-| Image | `grok_image` |
-| Video | `grok_video` |
+| Image | `grok_media kind=image` |
+| Video | `grok_media kind=video` |
 | Sessions | `grok_sessions` |
-| Progress | `grok_status` |
-| Output | `grok_result` |
-| Cancel | `grok_cancel` |
+| Progress | `grok_job action=status` |
+| Output | `grok_job action=result` |
+| Cancel | `grok_job action=cancel` |
 | Handoff context | `grok_transfer` |
