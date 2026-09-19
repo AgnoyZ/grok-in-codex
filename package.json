@@ -3,6 +3,7 @@
   "version": "0.6.0",
   "private": true,
   "description": "Codex plugin for orchestrating Grok Build (rescue, host-led implement, plan, design, workflows, reviews, media, docs)",
+  "author": "AgnoyZ",
   "type": "module",
   "engines": {
     "node": ">=18.18"
@@ -15,11 +16,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/stdevMac/grok-in-codex.git"
+    "url": "git+https://github.com/AgnoyZ/grok-in-codex.git"
   },
   "bugs": {
-    "url": "https://github.com/stdevMac/grok-in-codex/issues"
+    "url": "https://github.com/AgnoyZ/grok-in-codex/issues"
   },
-  "homepage": "https://github.com/stdevMac/grok-in-codex#readme",
+  "homepage": "https://github.com/AgnoyZ/grok-in-codex#readme",
   "license": "Apache-2.0"
 }

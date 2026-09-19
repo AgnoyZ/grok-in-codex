@@ -40,6 +40,34 @@ test("renderStatusReport single job shows usage postPending artifacts", () => {
   assert.match(text, /\.grok-designs\/x\.md/);
 });
 
+test("renderStatusReport shows semantic tool progress instead of stale thought text", () => {
+  const job = {
+    id: "task-progress",
+    kind: "task",
+    status: "running",
+    title: "Implement change",
+    progress: {
+      phase: "editing",
+      message: "thinking: parsing the implementation brief again",
+      lastTool: {
+        name: "write_file",
+        kind: "write",
+        status: "completed",
+        updatedAt: "2026-09-19T03:25:33.508Z"
+      },
+      toolCounts: { read: 5, write: 2 }
+    }
+  };
+  const detail = renderStatusReport([job], { jobId: job.id });
+  assert.match(detail, /Phase\*\*: editing/);
+  assert.match(detail, /Last tool\*\*: write_file \(write, completed\)/);
+  assert.match(detail, /Tool calls\*\*: read 5, write 2/);
+
+  const list = renderStatusReport([job]);
+  assert.match(list, /editing: write_file/);
+  assert.doesNotMatch(list, /parsing the implementation brief/);
+});
+
 test("renderTaskResult shows recoverable findings path on failed post", () => {
   const text = renderTaskResult({
     jobId: "review-2",

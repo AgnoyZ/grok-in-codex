@@ -314,6 +314,19 @@ export function renderStatusReport(jobs, options = {}) {
     if (job.progress?.message) {
       lines.push(`- **Progress**: ${job.progress.message}`);
     }
+    if (job.progress?.lastTool) {
+      const tool = job.progress.lastTool;
+      const details = [tool.kind, tool.status].filter(Boolean).join(", ");
+      lines.push(
+        `- **Last tool**: ${tool.name || "tool"}${details ? ` (${details})` : ""}${tool.updatedAt ? ` at ${tool.updatedAt}` : ""}`
+      );
+    }
+    if (job.progress?.toolCounts && Object.keys(job.progress.toolCounts).length) {
+      const counts = Object.entries(job.progress.toolCounts)
+        .map(([kind, count]) => `${kind} ${count}`)
+        .join(", ");
+      lines.push(`- **Tool calls**: ${counts}`);
+    }
     if (job.grokSessionId) {
       lines.push(`- **Grok session**: \`${job.grokSessionId}\``);
     }
@@ -379,9 +392,13 @@ export function renderStatusReport(jobs, options = {}) {
   }
   lines.push("| Job | Kind | Status | Progress | Summary |", "| --- | --- | --- | --- | --- |");
   for (const job of jobs) {
+    const phase = job.progress?.phase;
+    const toolName = job.progress?.lastTool?.name;
+    const semanticProgress =
+      phase && phase !== "running" ? `${phase}${toolName ? `: ${toolName}` : ""}` : null;
     const progress =
       job.status === "running"
-        ? short(job.progress?.message || job.progress?.phase || "running", 40)
+        ? short(semanticProgress || job.progress?.message || phase || "running", 40)
         : "—";
     lines.push(
       `| \`${escapeCell(job.id)}\` | ${escapeCell(job.kind || "task")} | ${escapeCell(job.status)} | ${escapeCell(progress)} | ${escapeCell(short(job.summary || job.title || ""))} |`

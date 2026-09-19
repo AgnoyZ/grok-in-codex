@@ -1,13 +1,13 @@
 {
   "name": "grok",
-  "version": "0.6.0",
+  "version": "0.6.0+codex.20260919034845",
   "description": "Use Grok from Codex for reviews, rescue, host-led implement, plan, design, workflows, docs, and media.",
   "author": {
-    "name": "stdevMac",
-    "url": "https://github.com/stdevMac"
+    "name": "AgnoyZ",
+    "url": "https://github.com/AgnoyZ"
   },
-  "homepage": "https://github.com/stdevMac/grok-in-codex",
-  "repository": "https://github.com/stdevMac/grok-in-codex",
+  "homepage": "https://github.com/AgnoyZ/grok-in-codex",
+  "repository": "https://github.com/AgnoyZ/grok-in-codex",
   "license": "Apache-2.0",
   "keywords": [
     "grok",
@@ -25,14 +25,14 @@
     "displayName": "Grok",
     "shortDescription": "Delegate reviews, rescue, host-led implement, plan, design, workflows, docs, and media to Grok",
     "longDescription": "Use the Grok CLI from Codex for structured code review, host-led Codex-plan/Grok-implement/Codex-verify, plan/design/execute pipelines, Rhai workflows, PR babysitting, documents, background jobs, image/video generation, job status, result retrieval, cancellation, and context transfer.",
-    "developerName": "stdevMac",
+    "developerName": "AgnoyZ",
     "category": "Developer Tools",
     "capabilities": [
       "Interactive",
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/stdevMac/grok-in-codex",
+    "websiteURL": "https://github.com/AgnoyZ/grok-in-codex",
     "defaultPrompt": [
       "Ask Grok to review this branch",
       "Use Grok to plan the auth rewrite",

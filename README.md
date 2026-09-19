@@ -49,7 +49,7 @@ Typical CLI location: `~/.grok/bin/grok` (ensure it is on `PATH`).
 From GitHub:
 
 ```bash
-codex plugin marketplace add stdevMac/grok-in-codex
+codex plugin marketplace add AgnoyZ/grok-in-codex
 codex plugin add grok@grok-in-codex
 ```
 

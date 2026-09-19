@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 import {
   buildGrokArgs,
   buildGrokBackgroundWrapperSource,
+  formatStreamToolMessage,
   formatStreamProgressMessage,
   getStreamProgressHelperSource,
   humanizeGrokFailure,
-  parseGrokJsonOutput
+  parseGrokJsonOutput,
+  streamToolPhase
 } from "../plugins/grok/scripts/lib/grok.mjs";
 
 test("parseGrokJsonOutput reads success payload", () => {
@@ -125,9 +131,27 @@ test("formatStreamProgressMessage tails thinking with prefix (not single token)"
   assert.ok(msg.length > "thinking:  across the plugin".length);
 });
 
+test("stream tool events expose semantic phases and safe messages", () => {
+  assert.equal(streamToolPhase("read"), "inspecting");
+  assert.equal(streamToolPhase("search"), "inspecting");
+  assert.equal(streamToolPhase("write"), "editing");
+  assert.equal(streamToolPhase("edit"), "editing");
+  assert.equal(streamToolPhase("execute"), "executing");
+  assert.equal(streamToolPhase("plan"), "planning");
+  assert.equal(streamToolPhase("unknown"), "working");
+  assert.equal(formatStreamToolMessage({ name: "write_file" }, "completed"), "write_file completed");
+  assert.equal(formatStreamToolMessage({ title: "run tests" }, "in_progress"), "run tests in progress");
+  assert.doesNotMatch(
+    formatStreamToolMessage({ name: "run_terminal_command", rawInput: { command: "secret" } }),
+    /secret/
+  );
+});
+
 test("background wrapper embeds the same progress helper tests exercise", () => {
   const helperSrc = getStreamProgressHelperSource();
-  assert.equal(helperSrc, formatStreamProgressMessage.toString());
+  assert.ok(helperSrc.includes(formatStreamProgressMessage.toString()));
+  assert.ok(helperSrc.includes(streamToolPhase.toString()));
+  assert.ok(helperSrc.includes(formatStreamToolMessage.toString()));
 
   // The string that lands in the worker is the live function body — evaluate it.
   const embedded = new Function(`${helperSrc}; return formatStreamProgressMessage;`)();
@@ -156,9 +180,15 @@ test("background wrapper embeds the same progress helper tests exercise", () => 
     wrapper.includes(helperSrc),
     "worker script must contain the helper source (not a drifted copy)"
   );
+  assert.doesNotThrow(() => new Function(wrapper), "generated worker must be valid JavaScript");
   assert.ok(!wrapper.includes("formatProgressTail"), "old inline copy must be gone");
   assert.match(wrapper, /formatStreamProgressMessage\(thoughtAcc/);
   assert.match(wrapper, /formatStreamProgressMessage\(textAcc/);
+  assert.match(wrapper, /evt\.type === "tool_call"/);
+  assert.match(wrapper, /evt\.type === "tool_call_update"/);
+  assert.match(wrapper, /currentPhase = streamToolPhase\(kind\)/);
+  assert.match(wrapper, /lastTool/);
+  assert.match(wrapper, /toolCounts/);
   // Call-site floor: empty helper result must not blank /status
   assert.match(
     wrapper,
@@ -167,4 +197,45 @@ test("background wrapper embeds the same progress helper tests exercise", () => 
   assert.match(wrapper, /\|\|\s*"running"/g);
   const floors = wrapper.match(/\|\|\s*"running"/g) || [];
   assert.equal(floors.length, 2, "text and thought branches both floor empty progress");
+});
+
+test("background wrapper persists structured tool progress", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "grok-tool-progress-"));
+  try {
+    const fakeCli = path.join(tmp, "fake-cli.cjs");
+    const resultFile = path.join(tmp, "result.json");
+    const progressFile = path.join(tmp, "progress.json");
+    fs.writeFileSync(
+      fakeCli,
+      [
+        "console.log(JSON.stringify({type:'tool_call',toolCallId:'call-1',title:'write_file',kind:'write',status:'pending'}));",
+        "console.log(JSON.stringify({type:'tool_call_update',toolCallId:'call-1',status:'completed'}));",
+        "console.log(JSON.stringify({type:'end',sessionId:'session-1'}));"
+      ].join("\n")
+    );
+    const wrapper = buildGrokBackgroundWrapperSource({
+      binary: process.execPath,
+      args: [fakeCli],
+      resultFile,
+      progressFile,
+      cwd: tmp,
+      streaming: true
+    });
+    const run = spawnSync(process.execPath, ["-e", wrapper], {
+      cwd: tmp,
+      encoding: "utf8",
+      timeout: 5000
+    });
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+    const progress = JSON.parse(fs.readFileSync(progressFile, "utf8"));
+    assert.equal(progress.phase, "completed");
+    assert.equal(progress.lastTool.name, "write_file");
+    assert.equal(progress.lastTool.kind, "write");
+    assert.equal(progress.lastTool.status, "completed");
+    assert.equal(progress.toolCounts.write, 1);
+    assert.equal(progress.lines, 3);
+    assert.match(progress.lastEventAt, /^\d{4}-\d{2}-\d{2}T/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

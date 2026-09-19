@@ -493,9 +493,43 @@ export function formatStreamProgressMessage(accumulated, opts = {}) {
   return prefix + body;
 }
 
+/** Map Grok tool event kinds to stable, user-facing job phases. */
+export function streamToolPhase(kind) {
+  switch (String(kind || "").toLowerCase()) {
+    case "plan":
+      return "planning";
+    case "read":
+    case "search":
+    case "list":
+      return "inspecting";
+    case "edit":
+    case "write":
+      return "editing";
+    case "execute":
+      return "executing";
+    default:
+      return "working";
+  }
+}
+
+/** Format a compact tool event without leaking raw command arguments. */
+export function formatStreamToolMessage(tool = {}, status = "") {
+  const name = String(tool.name || tool.title || tool.toolName || tool.kind || "tool");
+  const state = String(status || tool.status || "").toLowerCase();
+  if (state === "completed") return name + " completed";
+  if (state === "failed" || state === "error") return name + " failed";
+  if (state === "cancelled" || state === "canceled") return name + " cancelled";
+  if (state === "in_progress") return name + " in progress";
+  return name;
+}
+
 /** Source string interpolated into the background worker script. */
 export function getStreamProgressHelperSource() {
-  return formatStreamProgressMessage.toString();
+  return [
+    formatStreamProgressMessage.toString(),
+    streamToolPhase.toString(),
+    formatStreamToolMessage.toString()
+  ].join("\n");
 }
 
 /**
@@ -563,15 +597,35 @@ let thoughtAcc = "";
 let sessionId = null;
 let lineCount = 0;
 let lastMessage = "running";
+let currentPhase = "running";
+let lastEventAt = null;
+let lastTool = null;
+const toolCalls = new Map();
+const toolCounts = {};
 
 ${streamProgressHelper}
+
+function progressState(overrides = {}) {
+  return {
+    phase: currentPhase,
+    message: lastMessage,
+    lines: lineCount,
+    sessionId,
+    lastEventAt,
+    lastTool,
+    toolCounts: { ...toolCounts },
+    ...overrides
+  };
+}
 
 function handleStreamLine(line) {
   lineCount += 1;
   const trimmed = line.trim();
   if (!trimmed) return;
+  let flushImmediately = false;
   try {
     const evt = JSON.parse(trimmed);
+    lastEventAt = new Date().toISOString();
     if (evt.type === "text" && evt.data) {
       textAcc += evt.data;
       // Tail of accumulated text; floor empty so whitespace-only tokens keep "running"
@@ -580,23 +634,51 @@ function handleStreamLine(line) {
       thoughtAcc += evt.data;
       lastMessage =
         formatStreamProgressMessage(thoughtAcc, { prefix: "thinking: " }) || "running";
+    } else if (evt.type === "tool_call") {
+      const kind = String(evt.kind || "tool");
+      const tool = {
+        id: evt.toolCallId || null,
+        name: evt.title || evt.toolName || kind,
+        kind,
+        status: evt.status || "pending",
+        updatedAt: lastEventAt
+      };
+      if (tool.id) toolCalls.set(tool.id, tool);
+      toolCounts[kind] = (toolCounts[kind] || 0) + 1;
+      lastTool = tool;
+      currentPhase = streamToolPhase(kind);
+      lastMessage = formatStreamToolMessage(tool);
+      flushImmediately = true;
+    } else if (evt.type === "tool_call_update") {
+      const previous = toolCalls.get(evt.toolCallId) || lastTool || {};
+      const kind = String(evt.kind || previous.kind || "tool");
+      const tool = {
+        ...previous,
+        id: evt.toolCallId || previous.id || null,
+        name: evt.title || evt.toolName || previous.name || kind,
+        kind,
+        status: evt.status || previous.status || "in_progress",
+        updatedAt: lastEventAt
+      };
+      if (tool.id) toolCalls.set(tool.id, tool);
+      lastTool = tool;
+      currentPhase = streamToolPhase(kind);
+      lastMessage = formatStreamToolMessage(tool);
+      flushImmediately = true;
     } else if (evt.type === "end") {
       sessionId = evt.sessionId || sessionId;
+      currentPhase = "finishing";
       lastMessage = "finishing";
     } else if (evt.type === "error") {
+      currentPhase = "failed";
       lastMessage = evt.message || "error";
     }
     if (evt.sessionId) sessionId = evt.sessionId;
   } catch {
     lastMessage = trimmed.slice(0, 120);
   }
-  if (lineCount % 3 === 0 || /end|error/i.test(trimmed)) {
-    writeProgress({
-      phase: "running",
-      message: lastMessage,
-      lines: lineCount,
-      sessionId
-    });
+  if (flushImmediately || lineCount % 3 === 0 || /end|error/i.test(trimmed)) {
+    writeProgress(progressState());
   }
 }
 
@@ -619,7 +701,8 @@ child.stderr.on("data", (chunk) => {
   const text = chunk.toString();
   stderr += text;
   append("[stderr] " + text.trimEnd());
-  writeProgress({ phase: "running", message: text.trim().slice(0, 120), lines: lineCount });
+  lastEventAt = new Date().toISOString();
+  writeProgress(progressState({ message: text.trim().slice(0, 120) }));
 });
 child.on("close", (code, signal) => {
   if (streaming && stdoutBuf.trim()) {
