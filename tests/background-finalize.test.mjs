@@ -13,7 +13,7 @@ const COMPANION = path.resolve(
 
 /**
  * End-to-end: reaper false-failed background plan + valid result.json →
- * /result reconciles to completed and harvests plan.md into .grok-plans/.
+ * /result reconciles to completed and harvests plan.md into .grok/plans/.
  */
 test("result reconciles reaper-failed plan with result.json and harvests plan.md", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "grok-bg-fin-"));
@@ -126,10 +126,10 @@ test("result reconciles reaper-failed plan with result.json and harvests plan.md
     assert.ok(
       (out.artifacts || []).some(
         (a) =>
-          (typeof a === "string" && a.includes(".grok-plans")) ||
-          (a.path && a.path.includes(".grok-plans"))
+          (typeof a === "string" && a.includes(path.join('.grok', 'plans'))) ||
+          (a.path && a.path.includes(path.join('.grok', 'plans')))
       ),
-      `expected .grok-plans artifact, got ${JSON.stringify(out.artifacts)}`
+      `expected .grok/plans artifact, got ${JSON.stringify(out.artifacts)}`
     );
 
     const stored = readJobFile(cwd, jobId);

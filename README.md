@@ -4,7 +4,7 @@ Use [Grok](https://grok.com) from inside Codex for code reviews, delegated codin
 
 **Plugin version:** 0.8.0. Codex stays the orchestrator. A thin MCP server + companion script hands real work to Grok on your machine via the local CLI. Setup checks the historical **0.2.118** version floor and probes advertised CLI capabilities.
 
-Artifact dirs: `.grok-plans/`, `.grok-designs/`, `.grok-workflows/`, `.grok-docs/`, `.grok-reviews/`, `.grok-media/`. Setup adds `.grok-*/` to the target Git repository's local `info/exclude`, without changing `.gitignore`.
+Default artifact dirs: `.grok/plans/`, `.grok/designs/`, `.grok/workflows/`, `.grok/docs/`, `.grok/reviews/`, `.grok/media/`. Setup adds these six subdirectories and the legacy `.grok-*/` pattern to the target Git repository's local `info/exclude`, without changing `.gitignore` or ignoring all of `.grok/`. Explicit output paths remain supported. Existing artifacts are not moved or deleted; `latest` selects from `.grok/designs/`, and old design documents can still be passed by explicit path.
 
 Using Claude Code instead? Use the sibling plugin: [grok-in-claude](https://github.com/stdevMac/grok-in-claude).
 
@@ -15,15 +15,15 @@ Using Claude Code instead? Use the sibling plugin: [grok-in-claude](https://gith
 | `grok_setup` | Check CLI + auth + version floor + doctor; toggle stop review gate |
 | `grok_rescue` | Delegate investigation / fixes (isolated worktree by default; full control flags) |
 | `grok_implement` | Host-led implement: Codex plans/verifies, Grok implements a host-approved brief |
-| `grok_plan` | Plan mode only (explore → plan.md under `.grok-plans/`) |
+| `grok_plan` | Plan mode only (explore → plan.md under `.grok/plans/`) |
 | `grok_review` | Structured read-only review (tree / branch / PR; optional `postPending`) |
 | `grok_adversarial_review` | Challenge design, tradeoffs, and assumptions |
 | `grok_workflow` | List/run Grok Rhai multi-agent workflows |
-| `grok_design` | Design doc + PR plan (writer/reviewer loop → `.grok-designs/`) |
+| `grok_design` | Design doc + PR plan (writer/reviewer loop → `.grok/designs/`) |
 | `grok_execute_plan` | Execute a design-doc PR Plan DAG |
 | `grok_babysit` | Watch PRs / fix CI & review comments (`list` is read-only) |
-| `grok_document` | Generate docx / pdf / pptx → `.grok-docs/` |
-| `grok_media` | `kind=image` or `kind=video` → `.grok-media/` |
+| `grok_document` | Generate docx / pdf / pptx → `.grok/docs/` |
+| `grok_media` | `kind=image` or `kind=video` → `.grok/media/` |
 | `grok_sessions` | List / search / export Grok sessions |
 | `grok_transfer` | Build context-transfer guidance for Grok |
 | `grok_job` | `action=status` (default), `result`, or `cancel`; cancellation requires `jobId` |
@@ -115,7 +115,7 @@ grok_sessions action=list
 grok_job action=status
 grok_job action=result jobId="plan-abc123"
 grok_media kind=image aspect="16:9" prompt="Dark developer-tool launch banner"
-grok_media kind=video image="./.grok-media/image/hero.png" duration="6" prompt="gentle camera push-in"
+grok_media kind=video image="./.grok/media/image/hero.png" duration="6" prompt="gentle camera push-in"
 ```
 
 ### Workspace selection
@@ -154,7 +154,7 @@ Do **not** use `grok_plan` or `grok_design` for that host-owned planning phase. 
 For multi-PR or ambiguous product work where **Grok** owns planning, prefer:
 
 1. **`grok_plan`** — explore + harvest `plan.md`
-2. **`grok_design`** — design doc + PR plan under `.grok-designs/`
+2. **`grok_design`** — design doc + PR plan under `.grok/designs/`
 3. **`grok_execute_plan`** with `latest=true` — implement the PR DAG
 4. **`grok_review`** / **`grok_babysit`** — quality and CI loop
 
@@ -168,7 +168,7 @@ For multi-PR or ambiguous product work where **Grok** owns planning, prefer:
 - **Retention** — setup cleans recorded terminal jobs older than 30 days and keeps at most 200 recent terminal jobs across the state root. Status-list calls also clean, at most once per 24 hours. Running jobs, live lock owners, and project artifacts are preserved. Setup reports the removal count.
 - **Result size** — `grok_job action=result maxChars=20000` bounds the body by default; `0` disables truncation. Truncated output includes `truncated`, `totalChars`, `fullOutputPath`, and available artifact paths. The full output stays on disk. Companion flag: `--max-chars`.
 - **Atomic writes** — background workers write `result.json` via tmp + rename (no partial mid-write; no leftover `.tmp.*` after success).
-- **PR post-pending** — runs on background completion too; skips empty findings; empty/oversize diffs fail closed with recoverable findings under `.grok-reviews/`.
+- **PR post-pending** — runs on background completion too; skips empty findings; empty/oversize diffs fail closed with recoverable findings under `.grok/reviews/`.
 
 ## CLI posture
 
@@ -211,8 +211,8 @@ Default state root when unset: `~/.grok/codex-plugin/state/`. Codex does **not**
 
 ### Plan / design / execute
 
-- Plan mode harvests into `.grok-plans/`; result body prefers the plan file.
-- Design harvests into `.grok-designs/`.
+- Plan mode harvests into `.grok/plans/`; result body prefers the plan file.
+- Design harvests into `.grok/designs/`.
 - `grok_execute_plan` with `latest=true` picks the newest design doc; `dryRun=true` is read-only.
 
 ### Review
@@ -222,7 +222,7 @@ Default state root when unset: `~/.grok/codex-plugin/state/`. Codex does **not**
 
 ### Media
 
-- Default outputs land under `.grok-media/image/` and `.grok-media/video/`.
+- Default outputs land under `.grok/media/image/` and `.grok/media/video/`.
 - Session media is copied into those dirs when Grok leaves files in its session workspace.
 
 ### Jobs
@@ -246,7 +246,7 @@ are reported. Scans are capped at 10000 entries by default (configurable up to 1
 levels; `complete=false` and warnings indicate an incomplete inventory.
 
 Both actions are read-only: no Grok invocation, job creation, directory creation, copies, moves,
-Git-ignore updates, or reference rewrites. Generation still writes to the existing directories.
+Git-ignore updates, or reference rewrites. New generation defaults to the unified `.grok/` subdirectories; old artifacts stay in place.
 Custom output locations and session/state files are outside this inventory. Preview is a
 point-in-time proposal, not a migration approval or executable plan. See the
 [migration design](docs/artifact-migration.md) for reference handling and rollback requirements.

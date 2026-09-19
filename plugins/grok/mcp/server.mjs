@@ -150,7 +150,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "grok_plan",
     description:
-      "Headless Grok plan mode. Explores the codebase and harvests plan.md into .grok-plans/.",
+      "Headless Grok plan mode. Explores the codebase and harvests plan.md into .grok/plans/.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -216,7 +216,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "grok_design",
     description:
-      "Run design-doc writer/reviewer loop. Harvests design docs into .grok-designs/.",
+      "Run design-doc writer/reviewer loop. Harvests design docs into .grok/designs/.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -235,7 +235,7 @@ const TOOL_DEFINITIONS = [
       additionalProperties: false,
       properties: {
         designDoc: stringSchema("Path to design doc. Omit with latest=true."),
-        latest: booleanSchema("Use the latest design doc under .grok-designs/."),
+        latest: booleanSchema("Use the latest design doc under .grok/designs/."),
         concurrency: integerSchema("Parallel PR plan concurrency."),
         dryRun: booleanSchema("Dry-run only (read-only, no yolo)."),
         autoPr: booleanSchema("Open PRs automatically when the plan supports it."),
@@ -266,7 +266,7 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: "grok_document",
-    description: "Generate docx, pdf, or pptx via Grok document skills into .grok-docs/.",
+    description: "Generate docx, pdf, or pptx via Grok document skills into .grok/docs/.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -296,7 +296,7 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: "grok_media",
-    description: "Generate or edit images, or generate videos. Pass kind=image or kind=video. Artifacts use .grok-media/.",
+    description: "Generate or edit images, or generate videos. Pass kind=image or kind=video. Artifacts use .grok/media/.",
     inputSchema: {
       type: "object", additionalProperties: false, required: ["kind"],
       properties: {
@@ -335,7 +335,7 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: "grok_artifacts",
-    description: "Read-only discovery of legacy and proposed unified artifact directories, or a migration preview with path conflicts. Never moves files or changes output paths.",
+    description: "Read-only discovery of legacy and current unified artifact directories, or a migration preview with path conflicts. Never moves files or changes output paths.",
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     inputSchema: {
       type: "object", additionalProperties: false,

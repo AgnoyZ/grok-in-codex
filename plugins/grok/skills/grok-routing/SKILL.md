@@ -59,8 +59,8 @@ Use **`grok_plan` / `grok_design`** only when the user wants **Grok** to explore
 
 Prefer this sequence over a single giant rescue when **Grok** owns planning:
 
-1. **`grok_plan`** — explore + plan.md when the approach is unclear (artifacts under `.grok-plans/`).
-2. **`grok_design`** — consensus design doc + PR Plan → artifacts under `.grok-designs/`.
+1. **`grok_plan`** — explore + plan.md when the approach is unclear (artifacts under `.grok/plans/`).
+2. **`grok_design`** — consensus design doc + PR Plan → artifacts under `.grok/designs/`.
 3. **`grok_execute_plan`** with `latest=true` (or explicit `designDoc`) — implement the PR DAG in worktrees.
 4. **`grok_review`** / **`grok_babysit`** — quality and CI/review loop.
 

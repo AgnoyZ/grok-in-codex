@@ -197,10 +197,20 @@ test('T10 artifact exclude is idempotent and non-Git directories are skipped', t
   const dir = temp(t);
   assert.equal(excludeGrokArtifacts(dir).skipped, true);
   assert.equal(spawnSync('git', ['init'], { cwd: dir }).status, 0);
+  const excludeFile = path.join(dir, '.git', 'info', 'exclude');
+  fs.appendFileSync(excludeFile, '\n.grok-*/\n'); // Upgrade an already configured repository.
   const first = excludeGrokArtifacts(dir); assert.equal(first.updated, true);
   assert.equal(excludeGrokArtifacts(dir).updated, false);
   assert.equal(fs.readFileSync(first.path, 'utf8').split('.grok-*/').length, 2);
   assert.ok(!fs.existsSync(path.join(dir, '.gitignore')));
+  for (const kind of ['plans', 'designs', 'workflows', 'docs', 'reviews', 'media']) {
+    const artifactDir = path.join(dir, '.grok', kind);
+    fs.mkdirSync(artifactDir, { recursive: true });
+    fs.writeFileSync(path.join(artifactDir, 'artifact.txt'), 'output');
+    assert.equal(spawnSync('git', ['check-ignore', '-q', `.grok/${kind}/artifact.txt`], { cwd: dir }).status, 0);
+  }
+  fs.writeFileSync(path.join(dir, '.grok', 'settings.json'), '{}');
+  assert.equal(spawnSync('git', ['check-ignore', '-q', '.grok/settings.json'], { cwd: dir }).status, 1);
 });
 
 test('T9 companion bounds JSON and Markdown bodies while keeping the stored job intact', t => {

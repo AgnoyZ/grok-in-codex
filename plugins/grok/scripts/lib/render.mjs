@@ -234,7 +234,7 @@ export function renderTaskResult(payload) {
     lines.push(`- **Resume in Grok TUI**: \`grok --resume ${payload.grokSessionId}\``);
   }
   if (payload.kind === "image" || payload.kind === "video") {
-    lines.push("- **Mode**: media generation (default tools + denylist; companion copies into `.grok-media/`)");
+    lines.push("- **Mode**: media generation (default tools + denylist; companion copies into `.grok/media/`)");
     if (payload.mediaDir) {
       lines.push(`- **Output dir**: \`${payload.mediaDir}\``);
     }

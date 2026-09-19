@@ -2,6 +2,13 @@
 
 This changelog follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+- Default project outputs now use `.grok/{plans,designs,workflows,docs,reviews,media}/`, including latest-design lookup, prompts, MCP descriptions and skill examples.
+- Setup excludes the six unified artifact subdirectories locally without ignoring unrelated `.grok/` configuration.
+- Old artifacts and saved paths stay in place; no migration or deletion is performed. Explicit output paths remain supported.
+
 ## [0.8.0] - 2026-09-19
 
 ### Added

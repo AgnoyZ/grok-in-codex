@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isSameProcess, runCommand } from './process.mjs';
+import { ARTIFACT_LAYOUT } from './artifact-discovery.mjs';
 
 function retentionValue(value, fallback) {
   const number = Number(value ?? fallback);
@@ -87,8 +88,11 @@ export function excludeGrokArtifacts(cwd) {
   if (result.status !== 0) return { updated: false, skipped: true };
   const file = path.resolve(cwd, result.stdout.trim());
   const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-  if (existing.split(/\r?\n/).includes('.grok-*/')) return { updated: false, path: file };
+  const patterns = ['.grok-*/', ...ARTIFACT_LAYOUT.map(item => `/${item.unified}/`)];
+  const lines = new Set(existing.split(/\r?\n/));
+  const missing = patterns.filter(pattern => !lines.has(pattern));
+  if (!missing.length) return { updated: false, path: file };
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, (existing && !existing.endsWith('\n') ? '\n' : '') + '.grok-*/\n');
+  fs.appendFileSync(file, (existing && !existing.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n');
   return { updated: true, path: file };
 }

@@ -38,7 +38,7 @@ export function copyIntoDir(sourcePath, destDir) {
 }
 
 /**
- * Collect plan.md from Grok session dir; copy into .grok-plans/.
+ * Collect plan.md from Grok session dir; copy into .grok/plans/.
  */
 export function collectPlanArtifacts(cwd, sessionId, { jobId = null } = {}) {
   const artifacts = [];
@@ -51,7 +51,7 @@ export function collectPlanArtifacts(cwd, sessionId, { jobId = null } = {}) {
     return artifacts;
   }
   artifacts.push({ kind: "plan", path: planPath, label: "session plan.md" });
-  const destDir = ensureProjectArtifactDir(cwd, ".grok-plans");
+  const destDir = ensureProjectArtifactDir(cwd, ".grok/plans");
   const name = jobId ? `${jobId}-plan.md` : `plan-${sessionId.slice(0, 8)}.md`;
   const dest = path.join(destDir, name);
   fs.copyFileSync(planPath, dest);
@@ -78,11 +78,11 @@ export function extractDesignDocPathFromText(text) {
 }
 
 /**
- * Resolve the newest design document under project `.grok-designs/`.
+ * Resolve the newest design document under project `.grok/designs/`.
  * Returns absolute path or null.
  */
 export function resolveLatestDesignDoc(cwd) {
-  const dir = path.join(cwd, ".grok-designs");
+  const dir = path.join(cwd, ".grok/designs");
   if (!fs.existsSync(dir)) {
     return null;
   }
@@ -111,7 +111,7 @@ export function resolveLatestDesignDoc(cwd) {
 }
 
 /**
- * Resolve execute-plan design path: explicit path, or --latest / missing → newest in .grok-designs.
+ * Resolve execute-plan design path: explicit path, or --latest / missing → newest in .grok/designs.
  */
 export function resolveExecutePlanDesignPath(cwd, designDocPath, { latest = false } = {}) {
   if (designDocPath && designDocPath !== "latest" && designDocPath !== "--latest") {
@@ -127,7 +127,7 @@ export function resolveExecutePlanDesignPath(cwd, designDocPath, { latest = fals
     const found = resolveLatestDesignDoc(cwd);
     if (!found) {
       throw new Error(
-        "No design document found under .grok-designs/. Run /grok:design first or pass an explicit path."
+        "No design document found under .grok/designs/. Run /grok:design first or pass an explicit path."
       );
     }
     return found;
@@ -136,7 +136,7 @@ export function resolveExecutePlanDesignPath(cwd, designDocPath, { latest = fals
 }
 
 /**
- * Find design doc files in text/scratch/session and copy to .grok-designs/.
+ * Find design doc files in text/scratch/session and copy to .grok/designs/.
  */
 export function collectDesignArtifacts(cwd, { sessionId = null, text = "", jobId = null } = {}) {
   const artifacts = [];
@@ -169,12 +169,12 @@ export function collectDesignArtifacts(cwd, { sessionId = null, text = "", jobId
   }
 
   // Existing project designs (prefer recent copies)
-  const designsDir = path.join(cwd, ".grok-designs");
+  const designsDir = path.join(cwd, ".grok/designs");
   if (fs.existsSync(designsDir)) {
     walkMdFiles(designsDir, candidates, 1);
   }
 
-  const destDir = ensureProjectArtifactDir(cwd, ".grok-designs");
+  const destDir = ensureProjectArtifactDir(cwd, ".grok/designs");
   const seen = new Set();
   for (const candidate of candidates) {
     const abs = path.isAbsolute(candidate) ? candidate : path.resolve(cwd, candidate);
@@ -200,7 +200,7 @@ export function collectDesignArtifacts(cwd, { sessionId = null, text = "", jobId
 }
 
 /**
- * Harvest workflow report / scratch paths from text; copy into .grok-workflows/.
+ * Harvest workflow report / scratch paths from text; copy into .grok/workflows/.
  */
 export function collectWorkflowArtifacts(cwd, { text = "", jobId = null } = {}) {
   const artifacts = [];
@@ -223,7 +223,7 @@ export function collectWorkflowArtifacts(cwd, { text = "", jobId = null } = {}) 
     candidates.push(m[1]);
   }
 
-  const destDir = ensureProjectArtifactDir(cwd, ".grok-workflows");
+  const destDir = ensureProjectArtifactDir(cwd, ".grok/workflows");
   const seen = new Set();
   for (const candidate of candidates) {
     let abs = candidate;
@@ -300,11 +300,11 @@ export function preferPlanArtifactText(resultText, artifacts) {
 }
 
 /**
- * Collect document artifacts (docx/pdf/pptx) into .grok-docs/.
+ * Collect document artifacts (docx/pdf/pptx) into .grok/docs/.
  */
 export function collectDocumentArtifacts(cwd, { text = "", sessionId = null, jobId = null, sinceMs = null } = {}) {
   const artifacts = [];
-  const destDir = ensureProjectArtifactDir(cwd, ".grok-docs");
+  const destDir = ensureProjectArtifactDir(cwd, ".grok/docs");
   const exts = new Set([".docx", ".pdf", ".pptx", ".dotx"]);
   const candidates = [];
 
@@ -331,7 +331,7 @@ export function collectDocumentArtifacts(cwd, { text = "", sessionId = null, job
     // ignore
   }
 
-  // Project .grok-docs already
+  // Project .grok/docs already
   collectFilesByExt(destDir, exts, candidates, 1, sinceMs);
 
   const seen = new Set();

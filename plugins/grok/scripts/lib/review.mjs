@@ -379,7 +379,7 @@ export function writeRecoverableReviewFindings(cwd, jobId, review, { tmpDir = nu
   }
   const base =
     tmpDir ||
-    path.join(cwd, ".grok-reviews");
+    path.join(cwd, ".grok/reviews");
   fs.mkdirSync(base, { recursive: true });
   const file = path.join(base, `${jobId}-findings.json`);
   fs.writeFileSync(

@@ -21,7 +21,7 @@ export function buildDocumentPrompt({ type, brief, outputDir }) {
   if (!task) {
     throw new Error("Document brief/prompt is required");
   }
-  const out = outputDir || ".grok-docs";
+  const out = outputDir || ".grok/docs";
 
   const skillHint =
     docType === "pptx"

@@ -10,7 +10,8 @@ import {
   encodeGrokSessionWorkspaceKey,
   extractArtifactPaths,
   findSessionMediaFiles,
-  resolveGrokSessionDir
+  resolveGrokSessionDir,
+  resolveMediaOutputDir
 } from "../plugins/grok/scripts/lib/media.mjs";
 
 test("encodeGrokSessionWorkspaceKey percent-encodes slashes", () => {
@@ -46,7 +47,7 @@ test("copyMediaToDir copies into destination with unique names", () => {
   assert.equal(again, first);
 });
 
-test("collectMediaArtifacts copies session files into .grok-media", () => {
+test("collectMediaArtifacts copies session files into .grok/media", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "grok-home-"));
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "grok-cwd-"));
   const prevHome = process.env.HOME;
@@ -60,7 +61,9 @@ test("collectMediaArtifacts copies session files into .grok-media", () => {
     const sessionFile = path.join(imagesDir, "1.jpg");
     fs.writeFileSync(sessionFile, "jpeg-bytes");
 
-    const destDir = path.join(cwd, ".grok-media", "image");
+    const destDir = resolveMediaOutputDir(cwd, 'image');
+    assert.equal(destDir, path.join(cwd, '.grok', 'media', 'image'));
+    assert.equal(resolveMediaOutputDir(cwd, 'video'), path.join(cwd, '.grok', 'media', 'video'));
     const artifacts = collectMediaArtifacts({
       cwd,
       kind: "image",

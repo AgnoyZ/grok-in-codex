@@ -17,7 +17,7 @@ const MEDIA_EXT = new Set([
 const SESSION_MEDIA_DIRS = ["images", "videos", "assets"];
 
 export function resolveMediaOutputDir(cwd, kind = "media") {
-  const dir = path.join(cwd, ".grok-media", kind);
+  const dir = path.join(cwd, ".grok/media", kind);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -262,7 +262,7 @@ export function copyMediaToDir(sourcePath, destDir) {
 }
 
 /**
- * Collect media from Grok session dirs + text paths, copy into project .grok-media/<kind>/.
+ * Collect media from Grok session dirs + text paths, copy into project .grok/media/<kind>/.
  * Returns absolute paths of project-local artifacts (preferred contract for the plugin).
  */
 export function collectMediaArtifacts({

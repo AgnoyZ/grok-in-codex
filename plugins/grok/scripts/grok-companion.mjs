@@ -1214,7 +1214,7 @@ async function commandExecutePlan(argv) {
 
   if (!designDocPath && !resumePlanId && !wantLatest) {
     throw new Error(
-      "execute-plan requires <design-doc-path>, --latest (newest under .grok-designs/), or --resume <PLAN_ID>"
+      "execute-plan requires <design-doc-path>, --latest (newest under .grok/designs/), or --resume <PLAN_ID>"
     );
   }
 
@@ -1364,7 +1364,7 @@ async function commandDocument(argv) {
   if (!brief) {
     throw new Error("Missing document brief. Example: document --type pptx Launch deck for Grok plugin");
   }
-  const outDir = options.out || path.join(cwd, ".grok-docs");
+  const outDir = options.out || path.join(cwd, ".grok/docs");
   const control = controlFromParsedOptions(options);
   const model = normalizeModel(options.model);
   const effort = normalizeEffort(options.effort, options.model);

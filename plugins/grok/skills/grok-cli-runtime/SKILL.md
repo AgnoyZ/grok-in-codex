@@ -50,9 +50,9 @@ MCP input keys map to companion flags:
 
 ## Depth notes
 
-- `grok_execute_plan` with `latest=true` resolves newest `.grok-designs/*.md`.
-- Design/workflow/plan/document jobs harvest copies into `.grok-designs/` / `.grok-workflows/` / `.grok-plans/` / `.grok-docs/`.
-- Review `postPending=true`: skips empty findings; empty/oversize diffs fail closed and save findings under `.grok-reviews/`.
+- `grok_execute_plan` with `latest=true` resolves newest `.grok/designs/*.md`.
+- Design/workflow/plan/document jobs harvest copies into `.grok/designs/` / `.grok/workflows/` / `.grok/plans/` / `.grok/docs/`.
+- Review `postPending=true`: skips empty findings; empty/oversize diffs fail closed and save findings under `.grok/reviews/`.
 - Plan results prefer harvested `plan.md` body over narration.
 - Stop-gate uses sandbox `read-only` + denylist (no yolo).
 
@@ -92,7 +92,7 @@ MCP input keys map to companion flags:
 
 ## Plan (`grok_plan`)
 
-- Forces plan permission mode; harvests `.grok-plans/`
+- Forces plan permission mode; harvests `.grok/plans/`
 
 ## Review (`grok_review` / `grok_adversarial_review`)
 
@@ -110,7 +110,7 @@ MCP input keys map to companion flags:
 
 ## Media (`grok_media kind=image` / `grok_media kind=video`)
 
-- Artifacts under `.grok-media/image/` and `.grok-media/video/`
+- Artifacts under `.grok/media/image/` and `.grok/media/video/`
 
 ## Jobs
 
@@ -120,7 +120,7 @@ MCP input keys map to companion flags:
 
 ## Artifact inventory
 
-- `grok_artifacts action=discover` lists known legacy and proposed unified artifact paths.
+- `grok_artifacts action=discover` lists known legacy and current unified artifact paths.
 - `grok_artifacts action=preview` reports source/target mappings and conflicts for a possible `.grok/` layout.
 - Both calls are read-only. Inspect `complete`, `warnings`, and conflicts before discussing migration; no apply/move action exists.
 - Existing artifact output directories remain active. Never treat a preview as permission to move files or rewrite user references.

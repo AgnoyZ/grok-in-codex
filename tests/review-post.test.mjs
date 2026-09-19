@@ -173,10 +173,10 @@ test("writeRecoverableReviewFindings writes JSON", () => {
   const file = writeRecoverableReviewFindings(
     tmp,
     "job-1",
-    { verdict: "ok", summary: "s", findings: [], next_steps: [] },
-    { tmpDir: path.join(tmp, ".grok-reviews") }
+    { verdict: "ok", summary: "s", findings: [], next_steps: [] }
   );
   assert.ok(file);
+  assert.equal(file, path.join(tmp, '.grok', 'reviews', 'job-1-findings.json'));
   const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
   assert.equal(parsed.jobId, "job-1");
   assert.equal(parsed.summary, "s");

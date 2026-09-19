@@ -1,10 +1,13 @@
 # Artifact directory migration design
 
-Status: discovery and preview implemented in 0.8.0; execution is deliberately not implemented.
+Status: discovery and preview implemented in 0.8.0. New generation now defaults to the unified
+directories below. Migration execution is not implemented: old artifacts are not moved or deleted.
+Explicit output paths and stored job paths remain unchanged. `execute-plan --latest` searches
+`.grok/designs/`; use an explicit path to execute an old design document.
 
 ## Layout
 
-| Existing directory | Proposed directory |
+| Legacy directory (unchanged) | Default for new artifacts |
 | --- | --- |
 | `.grok-plans/` | `.grok/plans/` |
 | `.grok-designs/` | `.grok/designs/` |
@@ -50,10 +53,11 @@ scan. A preview cannot establish that the workspace is idle, or authorize later 
    document prompts, companion output-directory defaults, and stored job `artifacts`,
    `designDocPath` and `mediaDir` values. README, plugin skills, user documents, and externally
    saved links may contain literal paths. Do not blindly replace text in arbitrary files.
-3. Add a versioned path resolver before changing generation defaults. It must find both old
+3. Add a versioned path resolver before automatically relocating existing artifacts. It must find both old
    and new locations during a migration, define ordering for `latest` selection, and handle
-   duplicate filenames without silently selecting the wrong artifact. The current preview
-   does not change any production readers or writers.
+   duplicate filenames without silently selecting the wrong artifact. Current generation and
+   latest-design lookup use the unified layout; explicit and stored paths are read as recorded.
+   Discovery and preview still inventory both layouts without changing them.
 4. Choose an explicit conflict policy. The proposed default is to stop rather than overwrite
    or rename silently. Identical-file deduplication, if approved, requires byte/hash verification.
    Recheck case-folding collisions on case-insensitive filesystems.
@@ -67,5 +71,5 @@ scan. A preview cannot establish that the workspace is idle, or authorize later 
    the journal, restores explicitly changed references, and preserves later user edits.
    Removal of original artifacts is a separate, explicit decision after verification.
 
-These are design requirements for future execution, not commands performed by discovery or
-preview. A maintainer must choose when to implement migration and switch default output paths.
+These are design requirements for any future migration execution, not commands performed by
+discovery or preview. Switching generation defaults does not require moving historical artifacts.

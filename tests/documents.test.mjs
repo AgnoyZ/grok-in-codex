@@ -24,3 +24,10 @@ test("buildDocumentPrompt includes skill and path marker", () => {
   assert.match(p, /\.grok-docs/);
   assert.match(p, /DOCUMENT_PATH=/);
 });
+
+test('document prompt defaults to unified output and honors custom output', () => {
+  assert.ok(buildDocumentPrompt({ type: 'pdf', brief: 'Report' }).includes('.grok/docs/'));
+  const custom = buildDocumentPrompt({ type: 'pdf', brief: 'Report', outputDir: 'reports/custom' });
+  assert.ok(custom.includes('reports/custom/'));
+  assert.ok(!custom.includes('.grok/docs/'));
+});
