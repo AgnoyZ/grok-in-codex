@@ -162,6 +162,7 @@ For multi-PR or ambiguous product work where **Grok** owns planning, prefer:
 
 - **Workspace write locks** — one writer per canonical workspace, including media, documents, design and workflow execution. Other workspaces and read-only jobs can run concurrently. The conflict error names the owning job; finish or cancel it before retrying. Locks coordinate plugin jobs, not edits from your editor or other tools.
 - **Status** — live progress is a tail of accumulated text *and* thought streams; empty/whitespace-only stream tokens floor to `running`.
+- **Explicit job lookup** — status/result/cancel recover the owning workspace from the persisted job id when a caller omits or supplies the wrong `cwd`.
 - **Result** — plan jobs prefer harvested `plan.md` body over narration; finished jobs persist `config`, `usage`, and `artifacts` (v3 schema).
 - **Reaper** — PID and process start time must match on Linux/macOS; Windows and legacy jobs fall back to PID checks. A dead process with a complete result is reconciled according to its exit status; missing/truncated results fail with diagnostics.
 - **Timeout** — background jobs default to 60 minutes. `timeoutMinutes` overrides `GROK_JOB_TIMEOUT_MINUTES`; `0` disables it. Timeout terminates the process tree, records a failed result, and preserves partial output. Foreground calls are unaffected. Direct companion calls accept `--timeout-minutes`.

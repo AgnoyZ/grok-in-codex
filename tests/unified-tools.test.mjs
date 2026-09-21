@@ -40,6 +40,13 @@ test('grok_job routes all operations and rejects ambiguous destructive inputs', 
   assert.throws(() => buildCompanionInvocation('grok_job', { maxChars: 3 }), /only supported/);
 });
 
+test('grok_job schema stays explicit for Codex tool generation', () => {
+  const tool = listToolDefinitions().find(entry => entry.name === 'grok_job');
+  assert.ok(tool.inputSchema.properties.cwd);
+  assert.ok(tool.inputSchema.properties.jobId);
+  assert.equal(tool.inputSchema.allOf, undefined);
+});
+
 test('grok_media forwards both media kinds and enforces workspace and kind-specific arguments', () => {
   const image = buildCompanionInvocation('grok_media', { kind: 'image', edit: 'input.png', out: 'assets', background: true, timeoutMinutes: 2, json: true, prompt: 'edit' });
   assert.deepEqual(image, { command: 'image', args: ['image', '--timeout-minutes', '2', '--background', '--out', 'assets', '--edit', 'input.png', '--json', 'edit'] });

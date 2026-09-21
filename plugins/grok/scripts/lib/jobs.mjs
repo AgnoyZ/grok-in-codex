@@ -503,11 +503,36 @@ export class AmbiguousJobError extends Error {
 export function resolveJob(cwd, jobId) {
   const jobs = listJobs(cwd).map((job) => refreshJobLiveness(cwd, job));
   if (jobId) {
-    const match = jobs.find((job) => job.id === jobId) || readJobFile(cwd, jobId);
+    let match = jobs.find((job) => job.id === jobId) || readJobFile(cwd, jobId);
+    let jobCwd = cwd;
+    if (!match && /^[a-zA-Z0-9._-]+$/.test(jobId)) {
+      const stateRoot = resolvePluginStateRoot();
+      const candidates = [];
+      for (const entry of fs.existsSync(stateRoot) ? fs.readdirSync(stateRoot, { withFileTypes: true }) : []) {
+        if (!entry.isDirectory() || entry.name === "locks") continue;
+        const file = path.join(stateRoot, entry.name, "jobs", `${jobId}.json`);
+        if (!fs.existsSync(file)) continue;
+        try {
+          const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+          if (parsed?.id === jobId && typeof parsed.workspaceRoot === "string") {
+            candidates.push(parsed);
+          }
+        } catch {
+          // Ignore corrupt records here; their owning workspace reports the detailed error.
+        }
+      }
+      if (candidates.length > 1) {
+        throw new Error(`Job id is ambiguous across workspaces: ${jobId}`);
+      }
+      if (candidates.length === 1) {
+        match = candidates[0];
+        jobCwd = match.workspaceRoot;
+      }
+    }
     if (!match) {
       throw new Error(`Unknown job id: ${jobId}`);
     }
-    return refreshJobLiveness(cwd, match);
+    return refreshJobLiveness(jobCwd, match);
   }
 
   const running = jobs.filter((job) => job.status === "running");

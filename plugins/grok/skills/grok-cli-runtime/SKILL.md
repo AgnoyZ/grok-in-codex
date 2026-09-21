@@ -115,6 +115,7 @@ MCP input keys map to companion flags:
 ## Jobs
 
 - `grok_job action=status` / `grok_job action=result` / `grok_job action=cancel`
+- An explicit job id can recover its persisted owning workspace when `cwd` is missing or points at a different workspace.
 - Status shows accumulated stream progress (text + thought tails); whitespace-only stays `running`
 - Result includes usage and artifacts when present
 

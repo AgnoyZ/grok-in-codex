@@ -329,8 +329,7 @@ const TOOL_DEFINITIONS = [
         all: booleanSchema("Include older jobs for action=status."),
         maxChars: integerSchema("Result body character limit for action=result (default 20000; 0 disables).", 0),
         json: booleanSchema("Return machine-readable JSON.")
-      },
-      allOf: [{ if: { properties: { action: { const: "cancel" } }, required: ["action"] }, then: { required: ["jobId"] } }]
+      }
     }
   },
   {

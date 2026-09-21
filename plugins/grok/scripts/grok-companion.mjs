@@ -1726,7 +1726,9 @@ async function commandStatus(argv) {
   }
 
   if (jobId) {
-    const job = maybeFinalizeBackgroundJob(cwd, resolveJob(cwd, jobId));
+    const resolved = resolveJob(cwd, jobId);
+    const jobCwd = resolved.workspaceRoot || cwd;
+    const job = maybeFinalizeBackgroundJob(jobCwd, resolved);
     outputResult(options.json ? job : renderStatusReport([job], { jobId }), Boolean(options.json));
     return;
   }
@@ -1748,10 +1750,11 @@ async function commandResult(argv) {
   const cwd = resolveWorkspaceRoot(process.cwd());
   const jobId = positionals[0] || null;
   let job = resolveJob(cwd, jobId);
-  job = maybeFinalizeBackgroundJob(cwd, readJobFile(cwd, job.id) || job);
+  const jobCwd = job.workspaceRoot || cwd;
+  job = maybeFinalizeBackgroundJob(jobCwd, readJobFile(jobCwd, job.id) || job);
   const body = options.json ? job.resultText || '' : renderStoredJobResult(job);
   const limited = limitResult(body, options['max-chars'] ?? 20000, {
-    outputFile: path.join(path.dirname(job.resultFile || job.logFile || resolveJobLogFile(cwd, job.id)), job.id + '.output.txt'),
+    outputFile: path.join(path.dirname(job.resultFile || job.logFile || resolveJobLogFile(jobCwd, job.id)), job.id + '.output.txt'),
     artifacts: job.artifacts
   });
   if (options.json) {
@@ -1769,7 +1772,8 @@ async function commandCancel(argv) {
   const cwd = resolveWorkspaceRoot(process.cwd());
   const jobId = positionals[0] || null;
   let job = resolveJob(cwd, jobId);
-  job = readJobFile(cwd, job.id) || job;
+  const jobCwd = job.workspaceRoot || cwd;
+  job = readJobFile(jobCwd, job.id) || job;
 
   if (job.status !== "running") {
     const payload = { jobId: job.id, cancelled: false, reason: `Job is already ${job.status}` };
@@ -1777,7 +1781,7 @@ async function commandCancel(argv) {
     return;
   }
 
-  const pid = job.pid ?? readPidFile(resolveJobPidFile(cwd, job.id));
+  const pid = job.pid ?? readPidFile(resolveJobPidFile(jobCwd, job.id));
   const killed = pid && isSameProcess(pid, job.pidStartTime) ? terminateProcessTree(pid, "SIGTERM") : false;
   const finishedAt = nowIso();
   const fullJob = {
@@ -1788,14 +1792,14 @@ async function commandCancel(argv) {
     summary: "Cancelled by user",
     error: "Cancelled"
   };
-  upsertJob(cwd, {
+  upsertJob(jobCwd, {
     id: job.id,
     status: "cancelled",
     finishedAt,
     summary: fullJob.summary,
     error: fullJob.error
   });
-  writeJobFile(cwd, fullJob);
+  writeJobFile(jobCwd, fullJob);
 
   // A live Unix wrapper releases its lock after its child has exited.
   if (!pid || !isSameProcess(pid, job.pidStartTime)) releaseWorkspaceLock(job.lockFile, job.id);

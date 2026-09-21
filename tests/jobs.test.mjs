@@ -270,6 +270,29 @@ test("resolveJob requires id when multiple jobs are running", () => {
   });
 });
 
+test("resolveJob finds an explicit job id across workspace state partitions", () => {
+  withTempWorkspace((cwd) => {
+    const other = path.join(path.dirname(cwd), "other-repo");
+    fs.mkdirSync(other, { recursive: true });
+    const job = {
+      id: "task-cross-workspace",
+      kind: "task",
+      status: "running",
+      title: "cross workspace",
+      pid: process.pid,
+      workspaceRoot: cwd
+    };
+    writeJobFile(cwd, job);
+    upsertJob(cwd, job);
+
+    const resolved = resolveJob(other, job.id);
+
+    assert.equal(resolved.id, job.id);
+    assert.equal(resolved.workspaceRoot, cwd);
+    assert.equal(resolved.status, "running");
+  });
+});
+
 test("loadState migrates v2 lastTaskSessionId into listTaskSessions", () => {
   withTempWorkspace((cwd) => {
     saveState(cwd, {
