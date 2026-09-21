@@ -358,6 +358,22 @@ export function humanizeGrokFailure(sources = {}) {
     // fall through
   }
 
+  // Grok Build may wrap the useful API error in an outer Rust
+  // "Internal error: { ... }" dump. Extract the nested message before the
+  // generic first-line fallback so users can act on the real cause (for
+  // example a 403 market-group outage instead of just "Internal error: {").
+  const nestedMessage = blob.match(/"message"\s*:\s*"((?:\\.|[^"\\])*)"/i)?.[1];
+  if (nestedMessage) {
+    try {
+      const decoded = JSON.parse(`"${nestedMessage}"`);
+      if (decoded && decoded !== "Internal error: {") {
+        return humanizeGrokFailure({ message: decoded, exitCode: sources.exitCode });
+      }
+    } catch {
+      // fall through to the compact raw message
+    }
+  }
+
   // Drop obvious Rust debug noise / huge dumps
   const firstUseful =
     blob

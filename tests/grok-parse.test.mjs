@@ -85,6 +85,15 @@ test("humanizeGrokFailure maps auth failures", () => {
   assert.match(msg, /grok login/i);
 });
 
+test("humanizeGrokFailure extracts nested Rust API errors", () => {
+  const msg = humanizeGrokFailure({
+    stderr: `Error: Internal error: {\n  "message": "API error (status 403 Forbidden): market group unavailable",\n  "http_status": 403\n}`,
+    exitCode: 1
+  });
+  assert.match(msg, /market group unavailable/);
+  assert.ok(!/^Grok failed.*Internal error: \{/i.test(msg));
+});
+
 test("parseGrokJsonOutput humanizes bare RequirementError text", () => {
   const parsed = parseGrokJsonOutput(
     'Error: RequirementError { kind: "tools", detail: "run_terminal_cmd background" }'
